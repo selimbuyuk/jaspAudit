@@ -94,11 +94,11 @@ auditFairnessMeasures <- function(jaspResults, dataset, options, ...) {
 
 .auditFMEvaluationMatrixGroup <- function(jaspResults, options, dataset, ready, results){
   if (!is.null(jaspResults[["performanceMeasuresGroup"]]) || !options[["performanceMeasuresGroup"]]) {
-    jaspResults[["performanceMeasuresGroup"]] <- NULL
     return()
   }
 
   tableGroup <- createJaspTable(title = "Performance Metrics per Group")
+  tableGroup$dependOn(c("performanceMeasuresGroup",.auditFMCommonOptions()))
 
   # Bind table to jaspResults
   jaspResults[["performanceMeasuresGroup"]] <- tableGroup
@@ -110,9 +110,13 @@ auditFairnessMeasures <- function(jaspResults, dataset, options, ...) {
   tableGroup$addColumns(results)
 }
 
+.auditFMCommonOptions <- function(){
+  opt <- c("")
+  return (opt)
+}
+
 .auditFMEvaluationMatrixAll <- function(jaspResults, options, dataset, ready){
   if (!is.null(jaspResults[["performanceMeasuresAll"]]) || !options[["performanceMeasuresAll"]]) {
-    jaspResults[["performanceMeasuresAll"]] <- NULL
     return()
   }
 
@@ -257,7 +261,7 @@ auditFairnessMeasures <- function(jaspResults, dataset, options, ...) {
     results <- cbind(evalMeasures, results)
   }
 
-  results
+  return (results)
 
 }
 
