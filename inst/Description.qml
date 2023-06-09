@@ -15,8 +15,8 @@ Description
 
 	GroupTitle
 	{
-		title:			qsTr("Workflow")
-		icon:			"audit-workflow.svg"
+		title:			qsTr("Audit Sampling")
+		icon:			"audit-selection.svg"
 	}
 	Analysis
 	{
@@ -27,12 +27,6 @@ Description
 	{
 		title:			qsTr("Bayesian Sampling Workflow")
 		func:			"auditBayesianWorkflow"
-	}
-
-	GroupTitle
-	{
-		title:			qsTr("Planning")
-		icon:			"audit-planning.svg"
 	}
 	Analysis
 	{
@@ -46,22 +40,10 @@ Description
 		func:			"auditBayesianPlanning"
 		requiresData:	false
 	}
-
-	GroupTitle
-	{
-		title:			qsTr("Selection")
-		icon:			"audit-selection.svg"
-	}
 	Analysis
 	{
 		title:			qsTr("Selection")
 		func:			"auditSelection"
-	}
-
-	GroupTitle
-	{
-		title:			qsTr("Evaluation")
-		icon:			"audit-evaluation.svg"
 	}
 	Analysis
 	{
@@ -75,19 +57,15 @@ Description
 		func:			"auditBayesianEvaluation"
 		requiresData:	false
 	}
-GroupTitle
+		Analysis
 	{
-		title:			qsTr("Responsible AI")
-		icon:			"audit-number-analysis.svg"
+		title:			qsTr("True Value Estimation")
+		func:			"auditClassicalEstimation"
 	}
-	Analysis
-	{
-		title:			qsTr("Fairness Measures")
-		func:			"auditFairnessMeasures"
-	}
+	
 	GroupTitle
 	{
-		title:			qsTr("Digit Analysis")
+		title:			qsTr("Data Audit")
 		icon:			"audit-number-analysis.svg"
 	}
 	Analysis
@@ -101,15 +79,15 @@ GroupTitle
 		title:			qsTr("Repeated Values Analysis")
 		func:			"auditClassicalNumberBunching"
 	}
-
-	GroupTitle
+GroupTitle
 	{
-		title:			qsTr("Other")
-		icon:			"audit-other.svg"
+		title:			qsTr("Algorithm Audit")
+		icon:			"test.svg"
 	}
 	Analysis
 	{
-		title:			qsTr("True Value Estimation")
-		func:			"auditClassicalEstimation"
+		title:			qsTr("Automatic Fairness Criteria")
+		func:			"auditFairnessMeasures"
 	}
+	
 }

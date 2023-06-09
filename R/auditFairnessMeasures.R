@@ -30,16 +30,17 @@ auditFairnessMeasures <- function(jaspResults, dataset, options, ...) {
   ready <- (options[["group"]] != "" &&
               options[["actual"]]      != "" &&
               options[["predicted"]]   != "" &&
+              # options[["predictors"]]   != "" &&
+              # options[["target"]]   != "" &&
               options[["selectedRow"]] != -1 )
 
   dataset <- .auditFMReadData(dataset, options, ready)
   results <- .auditFMComputeResults(dataset, options, ready)
 
-  options[["Q1Selector"]] <- "yahaha"
-
   # Compute results and create the model summary table
   #.mlClassificationTableMetrics(dataset, options, jaspResults, ready, position = 2)
 
+  #.auditFMPred(dataset, options, ready)
   #.auditFMClassificationTableSummary(dataset, options, jaspResults, ready, position = 1, type = "neuralnet")
   .auditFMCreateTable(jaspResults, options, dataset, ready, results[, -c(1:4)])
 
@@ -57,11 +58,36 @@ auditFairnessMeasures <- function(jaspResults, dataset, options, ...) {
   }
 
   if (ready) {
+    # dataset <- .readDataSetToEnd(columns.as.numeric = c(options[["predicted"]], options[["actual"]]),
+    #                              columns.as.factor= c(options[["group"]], options[["predictors"]], options[["target"]]))
     dataset <- .readDataSetToEnd(columns.as.numeric = c(options[["predicted"]], options[["actual"]]),
-                                 columns.as.factor= options[["group"]])
+                                 columns.as.factor= c(options[["group"]]))
     return(dataset)
   }
 }
+
+# .auditFMPred<-function(dataset, options, ready){
+#   if (!ready){return ()}
+#   # predictors <- options[["predictors"]]
+#   #formula <- formula(paste("score_text", "~", paste(predictors, collapse = " + ")))
+#   #formula<- formula(paste("levelVar", "~", paste("race", collapse = " + ")))
+#   ## classification mode
+#   # default with factor response:
+#   #model <- e1071::svm(formula, data = dataset, scale = FALSE)
+#   
+#   #formula <- formula(paste("score_text", "~", paste(c("sex","race"), collapse = " + ")))
+#   predictors <- options[["predictors"]]
+#   target <- options[["target"]]
+#   formula <- formula(paste(target, "~", paste(predictors, collapse = " + ")))
+#   #formula<- formula(paste("score_text", "~", paste("race", collapse = " + ")))
+#   ## classification mode
+#   # default with factor response:
+#   model <- e1071::svm(formula, data = dataset, scale = FALSE, type = "C-classification")
+#   #testPredictions <- predict(model, newdata = test)
+# 
+#   # fit <- e1071::svm(formula, data = dataset, type = "C-classification")
+# }
+
 
 #maak functie waarin results <- .auditFMComputeResults
 .auditFMCreateTable <- function(jaspResults, options, dataset, ready, results){
@@ -87,8 +113,6 @@ auditFairnessMeasures <- function(jaspResults, dataset, options, ...) {
   #   results <- results[c("levelsGroup", "accPar")]
   # }
 
-
-
   tb$addColumns(results)
 }
 
@@ -111,7 +135,7 @@ auditFairnessMeasures <- function(jaspResults, dataset, options, ...) {
 }
 
 .auditFMCommonOptions <- function(){
-  opt <- c("")
+  opt <- c("group", "predicted", "")
   return (opt)
 }
 
@@ -121,6 +145,7 @@ auditFairnessMeasures <- function(jaspResults, dataset, options, ...) {
   }
 
   tableAll <- createJaspTable(title = "Performance Metrics for Whole Dataset")
+  tableAll$dependOn(c("performanceMeasuresAll",.auditFMCommonOptions()))
 
   jaspResults[["performanceMeasuresAll"]] <- tableAll
 
@@ -180,6 +205,8 @@ auditFairnessMeasures <- function(jaspResults, dataset, options, ...) {
   #counts$tp for the positive class
   #counts$tn / all counts (total number of samples that belong to this sample group)
   #this is in case the negative class corresponds to the favorable outcome
+  
+  propPar <- (counts$tp + counts$fp) / (counts$tp + counts$fp + counts$tn + counts$fn)
 
   eqOdds <- counts$tp / (counts$tp + counts$fn)
 
@@ -199,7 +226,7 @@ auditFairnessMeasures <- function(jaspResults, dataset, options, ...) {
     sqrt(as.numeric(counts$tp + counts$fp) * as.numeric(counts$tp + counts$fn) *
            as.numeric(counts$tn + counts$fp)*as.numeric(counts$tn +counts$fn))
 
-  resultsDf <- data.frame(demPar, eqOdds, prPar, accPar,
+  resultsDf <- data.frame(demPar, propPar, eqOdds, prPar, accPar,
                           fnrPar, fprPar, npvPar,
                           specPar, mcc)
   return (resultsDf)

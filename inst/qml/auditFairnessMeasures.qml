@@ -26,6 +26,76 @@ import "./common"	as Common
 
 Form {
 	columns:							2
+	
+	
+	
+	Section{
+  	title: qsTr("Machine Learning")
+  	columns: 1
+  	DropDown
+    {
+      id: "mltask"
+    	name:								"mltask"
+    	indexDefaultValue:					0
+    	label:								qsTr("Machine Learning Type")
+    	values:
+    		[
+    		{ label: qsTr("Regular Binary Classification"), 			value: "binclass",id: "binclass"},
+    		{label: qsTr("Fairness-Aware Binary Classification"), 			value: "fairclass",id: "binclass"},    		{ label: qsTr("Regression"), 			value: "regression", id: "regression"},
+    	]
+    }
+    
+    DropDown
+    {
+      visible: true
+    	name:								"mlalgo"
+    	indexDefaultValue:					0
+    	label:	qsTr("Algorithm")
+    	values: mltask.value == "binclass" ? [
+    		{ label: qsTr("Support Vector Machines"), 			value: "svm"},
+    		{ label: qsTr("Neural Network"), 			value: "nn"},
+    		{ label: qsTr("XGBoost"), 			value: "xgb"},
+    	] : (mltask.value == "fairclass" ? [
+    		{ label: qsTr("FairXGBOOST"), 			value: "fxgb"},
+    		{ label: qsTr("Fair-AdaBoost"), 			value: "fada"},
+    		{ label: qsTr("FairGBM"), 			value: "fgbm"},
+    	] : [
+    		{ label: qsTr("Simple Regression"), 			value: "sreg"},
+    		{ label: qsTr("Logistic Regression"), 			value: "lr"}
+    	]) 
+    		
+    }
+    
+  VariablesForm
+	{
+		AvailableVariablesList
+		{
+			name:								"variables"
+		}
+
+		AssignedVariablesList
+		{
+			id:									target
+			name:								"target"
+			title:								qsTr("Target")
+			singleVariable:						true
+			allowedColumns:						["ordinal", "nominal", "nominalText"]
+		}
+
+		AssignedVariablesList
+		{
+			id:									predictors
+			name:								"predictors"
+			title:								qsTr("Features")
+			allowedColumns:						["scale", "ordinal", "nominal", "nominalText"]
+			allowAnalysisOwnComputedColumns:	false
+		}
+	}
+
+    
+    
+	
+	}
   Section{
   title: qsTr("Pick Variables")
 	VariablesForm
@@ -201,157 +271,89 @@ Form {
 
  Section
  {
+  columns: 1 
   title: qsTr("Fairness Measures")
-
+    
   Group
   {
-  columns:			2
-	Layout.columnSpan:	2
-
     HelpButton
   	{
-  		toolTip:			qsTr("Manor we shall merit by chief wound no or would. Oh towards between subject passage sending mention or it. Sight happy do burst fruit to woody begin at. Assurance perpetual he in oh determine as. The year paid met him does eyes same. Own marianne improved sociable not out. Thing do sight blush mr an. Celebrated am announcing delightful remarkably we in literature it solicitude. Design use say piqued any gay supply. Front sex match vexed her those great.
-
-Demesne far hearted suppose venture excited see had has. Dependent on so extremely delivered by. Yet .no jokes worse her why. Bed one supposing breakfast day fulfilled off depending questions. Whatever boy her exertion his extended. Ecstatic followed handsome drawings entirely mrs one yet outweigh. Of acceptance insipidity remarkably is invitation.
-")
-  		helpPage:			"auditFairnessQuestionHelp/auditQ1Helper"
-  		Layout.columnSpan:	2
+  		toolTip:			qsTr("Click to learn more about Q1.")
+  		helpPage:			"auditQ2Helper"
+  		Layout.columnSpan:	1
   	}
-
-    Group
+  	
+    RadioButtonGroup
     {
-      RadioButtonGroup
-      {
-      name: "q1"
-      id: "q1"
-      title: qsTr("Do you want to be fair based on disparate representation or based on disparate errors of your system?")
-
-      RadioButton{
-      id:"q1option1"; label: qsTr("Representation"); name:"q1option1"; value:"rep";  checked: true; onClicked:
-       {
-        groupQ2.visible = true
-        q2.title= qsTr("Do you need to select equal # of people from each group or proportional to their percentage in the \n overall population?")
-        q2option1.label =qsTr("Equal Numbers")
-        q2option2.label =qsTr("Proportional")
-       }
-      }
-
-      RadioButton{
-      id:"q1option2"; label: qsTr("Errors"); value:"err"; onClicked:
-        {
-        groupQ2.visible = true
-        q2.title= qsTr("Are your interventions punitive or assistive")
-        q2option1.label =qsTr("Punitive")
-        q2option2.label =qsTr("Assistive")
-        }
-      }
-      }
-     }
+    name: "q1"
+    id: "q1"
+    title: qsTr("Should the truth abels be used?")
+    RadioButton{id:"q1option1"; label: qsTr("Yes"); name:"q1option1"; value:"yes";  checked: true}
+    RadioButton{id:"q1option2"; label: qsTr("No"); value:"no"}
     }
-
-	Group
-	{
-	  id : groupQ2
-	  visible: false
-  	columns:			2
-		Layout.columnSpan:	2
-
+   }
+  
+  Group
+  {
+  
     HelpButton
   	{
-  		toolTip:			qsTr("Click to learn more about stuff from Q2.")
+  		toolTip:			qsTr("Click to learn more about Q2.")
   		helpPage:			"auditQ2Helper"
-  		Layout.columnSpan:	2
+  		Layout.columnSpan:	1
   	}
 
-    Group
+    RadioButtonGroup
     {
-      RadioButtonGroup
-      {
-      name: "q2"
-      id: "q2"
-      title: qsTr("")
-
-      RadioButton{
-      id:"q2option1"; checked: true; value:"a"; onClicked:
-       {
-       if(q1option1.clicked)
-        {
-        groupQ3.visible = false
-        }
-       if(q1option2.clicked)
-        {
-        groupQ3.visible = true
-        q3.title= qsTr("Are you intervening with a very small % of the population?")
-        q3option1.label =qsTr("Yes")
-        q3option2.label =qsTr("No")
-        }
-       }
-      }
-
-      RadioButton{
-      id:"q2option2";  value:"b"; onClicked:
-        {
-        if(q1option1.clicked)
-        {
-        groupQ3.visible = false
-        }
-        if(q1option2.clicked)
-        {
-        groupQ3.visible = true
-        q3.title= qsTr("Are you intervening with a very small % of the population?")
-        q3option1.label =qsTr("Yes")
-        q3option2.label =qsTr("No")
-        }
-        }
-      }
-      }
-     }
-		}
-
-	Group{
-	  id: groupQ3
-	  visible: false
-  	columns:			2
-		Layout.columnSpan:	2
-
+    name: "q2"
+    id: "q2"
+    title: q1option1.checked ? qsTr("Should all classes of the confusion matrix be used?") : qsTr("Should absolute values or proportions be used?")
+    RadioButton{id:"q2option1"; label: q1option1.checked ? qsTr("Yes"): qsTr("Absolute"); name:"q2option1"; value:q1option1.checked ? "yes": "abs";  checked: true}
+    RadioButton{id:"q2option2"; label: q1option1.checked ? qsTr("No"): qsTr("Proportional"); name:"q2option2"; value:q1option1.checked ? "no": "prop";  checked: true}
+    }
+   }
+   
+  Group
+  {
+    id: "g3"
+    visible: (q1option1.checked && q2option2.value == "no" && q2option2.checked) ? true: false
     HelpButton
   	{
-  		toolTip:			qsTr("Click to learn more about stuff from Q2.")
+  		toolTip:			qsTr("Click to learn more about Q3.")
   		helpPage:			"auditQ2Helper"
-  		Layout.columnSpan:	2
+  		Layout.columnSpan:	1
   	}
 
-    Group{
-      RadioButtonGroup
-      {
-      name: "q3"
-      id: "q3"
-      title: qsTr("")
+    RadioButtonGroup
+    {
+    name: "q3"
+    id: "q3"
+    title: qsTr("Should we focus on correctly or incorrectly classified classes?")
+    RadioButton{id:"q3option1"; label: qsTr("Correctly"); name:"q3option1"; value:"corr";  checked: true}
+    RadioButton{id:"q3option2"; label: qsTr("Incorrectly"); name:"q3option2"; value:"incorr";  checked: true}
+    }
+   }
+   
+  Group
+  {
+    visible: (g3.visible) ? true: false
+    HelpButton
+  	{
+  		toolTip:			qsTr("Click to learn more about Q4.")
+  		helpPage:			"auditQ2Helper"
+  		Layout.columnSpan:	1
+  	}
 
-      RadioButton{
-      id:"q3option1"; label: qsTr("Representation"); value:"c"; onClicked:
-       {
-        groupQ4.visible = true
-        q4.title= qsTr("Do you need to select equal # of people from each group or proportional to their percentage in the \n overall population?")
-        q4option1.label =qsTr("Equal Numbers")
-        q4option2.label =qsTr("Proportional")
-       }
-      }
-
-      RadioButton{
-      id:"q3option2";label: qsTr("Errors"); value:"d"; onClicked:
-        {
-        groupQ4.visible = true
-        q4.title= qsTr("Are your interventions punitive or assistive")
-        q4option1.label =qsTr("Punitive")
-        q4option2.label =qsTr("Assistive")
-        }
-      }
-      }
-      }
-      }
-
-
+    RadioButtonGroup
+    {
+    name: "q4"
+    id: "q4"
+    title: q3option1.checked ? qsTr("Should we focus on true positive or true negative rates") : qsTr("Should we focus on false positive or false negative rates?")
+    RadioButton{id:"q4option1"; label: q3option1.checked ? qsTr("True Positives"): qsTr("False Positives"); name:"q3option1"; value: q3option1.checked ? "tp" : "fp";  checked: true}
+    RadioButton{id:"q4option2"; label: q3option1.checked ? qsTr("True Negatives"): qsTr("False Negatives"); name:"q3option2"; value: q3option1.checked ? "fp" : "fn";  checked: true}
+    }
+   }
+    
   }
 
   Section {
