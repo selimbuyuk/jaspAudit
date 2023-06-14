@@ -23,7 +23,7 @@
 #AUDIT OF FINANCIAL STATEMENS
 #AUDIT OF DATA
 
-auditFairnessMeasures <- function(jaspResults, dataset, options, ...) {
+auditFairnessCriteria <- function(jaspResults, dataset, options, ...) {
 
   #x <- jfa::fairness()
 
@@ -66,27 +66,27 @@ auditFairnessMeasures <- function(jaspResults, dataset, options, ...) {
   }
 }
 
-# .auditFMPred<-function(dataset, options, ready){
-#   if (!ready){return ()}
-#   # predictors <- options[["predictors"]]
-#   #formula <- formula(paste("score_text", "~", paste(predictors, collapse = " + ")))
-#   #formula<- formula(paste("levelVar", "~", paste("race", collapse = " + ")))
-#   ## classification mode
-#   # default with factor response:
-#   #model <- e1071::svm(formula, data = dataset, scale = FALSE)
-#   
-#   #formula <- formula(paste("score_text", "~", paste(c("sex","race"), collapse = " + ")))
-#   predictors <- options[["predictors"]]
-#   target <- options[["target"]]
-#   formula <- formula(paste(target, "~", paste(predictors, collapse = " + ")))
-#   #formula<- formula(paste("score_text", "~", paste("race", collapse = " + ")))
-#   ## classification mode
-#   # default with factor response:
-#   model <- e1071::svm(formula, data = dataset, scale = FALSE, type = "C-classification")
-#   #testPredictions <- predict(model, newdata = test)
-# 
-#   # fit <- e1071::svm(formula, data = dataset, type = "C-classification")
-# }
+.auditFMPred<-function(dataset, options, ready){
+  if (!ready){return ()}
+  # predictors <- options[["predictors"]]
+  #formula <- formula(paste("score_text", "~", paste(predictors, collapse = " + ")))
+  #formula<- formula(paste("levelVar", "~", paste("race", collapse = " + ")))
+  ## classification mode
+  # default with factor response:
+  #model <- e1071::svm(formula, data = dataset, scale = FALSE)
+
+  #formula <- formula(paste("score_text", "~", paste(c("sex","race"), collapse = " + ")))
+  predictors <- options[["predictors"]]
+  target <- options[["target"]]
+  formula <- formula(paste(target, "~", paste(predictors, collapse = " + ")))
+  #formula<- formula(paste("score_text", "~", paste("race", collapse = " + ")))
+  ## classification mode
+  # default with factor response:
+  model <- e1071::svm(formula, data = dataset, scale = FALSE, type = "C-classification")
+  #testPredictions <- predict(model, newdata = test)
+
+  # fit <- e1071::svm(formula, data = dataset, type = "C-classification")
+}
 
 
 #maak functie waarin results <- .auditFMComputeResults
@@ -99,13 +99,19 @@ auditFairnessMeasures <- function(jaspResults, dataset, options, ...) {
     return ()
   }
 
-  #df<- read.csv("~/jaspAudit/R/measuresdict.csv")
-  df<- data.frame(id = c("demPar", "accPar"), "q1" = c("rep","err"), "q2" = c("a","b"), "q3" = c("c","d"))
+  df<- data.frame(id = c("demPar", "propPar", "eqOdds", "prPar", "accPar",
+                         "fnrPar", "fprPar", "npvPar",
+                         "specPar", "mcc"),
+                  "q1" = c("no","no","yes","yes","yes","yes","yes","yes","yes","yes"),
+                  "q2" = c("abs","prop","yes","no","yes","no","no","no","no","yes"),
+                  "q3" = c("","","","corr","","incorr","incorr","corr","corr",""),
+                  "q4" = c("","","","tp","","fn","fp","tn","tn",""))
 
-  subset <- subset(df, (q1 == options[["q1"]] & q2 == options[["q2"]] & q3 == options[["q3"]]))[["id"]]
+  subset <- subset(df, (q1 == options[["q1"]] & q2 == options[["q2"]] & q3 == options[["q3"]] & q4 == options[["q4"]]))[["id"]]
   if (length(subset) != 0){
     results<- results[c("levelsGroup", subset)]
   }
+  
   # if (options[["q1"]]=="representation" && options[["q2"]] != "q2option1" && options[["q2"]] != "q2option2")){
   #   results <- results[c("levelsGroup", "demPar")]
   # }
@@ -201,14 +207,18 @@ auditFairnessMeasures <- function(jaspResults, dataset, options, ...) {
 .auditFMCalcFairMeasures <- function(counts){
   #equal amount of positive predictions in each group
   #therefore, just add up TP + FP
-  demPar <- counts$tn/(counts$tp + counts$fp + counts$tn + counts$fn)
+  demPar <- counts$tp + counts$fp
+  #demPar <- counts$tn/(counts$tp + counts$fp + counts$tn + counts$fn)
   #counts$tp for the positive class
   #counts$tn / all counts (total number of samples that belong to this sample group)
   #this is in case the negative class corresponds to the favorable outcome
   
   propPar <- (counts$tp + counts$fp) / (counts$tp + counts$fp + counts$tn + counts$fn)
 
-  eqOdds <- counts$tp / (counts$tp + counts$fn)
+  #original was wrong so we adapted it 
+  #eqOdds <- counts$tp / (counts$tp + counts$fn)
+  #tpr/fpr should be 1 if equalized odds. this has to be 
+  eqOdds <- (counts$tp / (counts$tp + counts$fn)) / ((counts$fp / (counts$fp + counts$tn)))
 
   prPar <- counts$tp / (counts$tp + counts$fp)
 

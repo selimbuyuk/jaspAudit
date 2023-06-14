@@ -86,8 +86,13 @@ GroupTitle
 	}
 	Analysis
 	{
+		title:			qsTr("Automatic Fairness Criteria & Model Selection")
+		func:			"auditFairnessCriteriaAndSelection"
+	}
+		Analysis
+	{
 		title:			qsTr("Automatic Fairness Criteria")
-		func:			"auditFairnessMeasures"
+		func:			"auditFairnessCriteria"
 	}
 	
 }
