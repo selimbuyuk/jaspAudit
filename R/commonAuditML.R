@@ -24,7 +24,24 @@
   jaspResults[["formula"]]$dependOn(options = c("features", "target"))
 }
 
-.auditPredResult <- function(formula, fit, testPredictions, dataPredictions, trainingSet, testSet, options, jaspResults, name){
+.auditPerfMeasures <- function(dataPredictions, dataset, options){
+  cf <- caret::confusionMatrix(data = as.factor(dataPredictions), reference=as.factor(dataset[, options[["target"]]]))$table
+  counts<- .auditFMGetCounts(cf)
+    
+  accuracy <-  (counts$tp + counts$tn) / (counts$tp + counts$fn + counts$fp + counts$tn)
+  precision <- counts$tp / (counts$tp + counts$fp)
+  recall <- counts$tp / (counts$tp + counts$fn)
+  f1 <- 2 * ((precision * recall) / (precision + recall))
+  mcc <- (counts$tp * counts$tn - counts$fp * counts$fn)/
+    sqrt(as.numeric(counts$tp + counts$fp) * as.numeric(counts$tp + counts$fn) *
+           as.numeric(counts$tn + counts$fp)*as.numeric(counts$tn +counts$fn))
+  
+  resultsDf<- data.frame(accuracy, precision, recall, f1, mcc)
+  
+  return(resultsDf)
+}
+
+.auditPredResult <- function(formula, fit, testPredictions, dataPredictions, trainingSet, testSet, options, jaspResults, name, dataset){
   result <- list()
   result[["formula"]] <- formula
   result[["model"]] <- fit
@@ -33,6 +50,8 @@
   result[["ntrain"]] <- nrow(trainingSet)
   result[["ntest"]] <- nrow(testSet)
   result[["classes"]] <- dataPredictions
+  result[["perfMeasures"]] <- .auditPerfMeasures(dataPredictions, dataset, options)
+
   jaspResults[[name]] <- createJaspState(result)
   jaspResults[[name]]$dependOn(options = c("target","features","group"))
 }
@@ -49,15 +68,17 @@
   # Just create a train and a test set (no optimization)
   testSet <- dataset[-trainingIndex, ]
   
-  if (name == "classificationResultSVM")
+  #check if name contains SVM
+  if (grepl("SVM", name, fixed = TRUE))
   {
     fit <- e1071::svm(formula, data = trainingSet, type = "C-classification")
+    
     # Use the specified model to make predictions for dataset
     testPredictions <- predict(fit, newdata = testSet, type="response")
     dataPredictions <- predict(fit, newdata = dataset, type="response")
-    .auditPredResult(formula, fit, testPredictions, dataPredictions, trainingSet, testSet, options, jaspResults, name)
+    .auditPredResult(formula, fit, testPredictions, dataPredictions, trainingSet, testSet, options, jaspResults, name, dataset)
   }
-  else if (name == "classificationResultRF")
+  if (grepl("RF", name, fixed = TRUE))
   {
     trainingSet[[options[["target"]]]] <- as.factor(trainingSet[[options[["target"]]]])
     fit <- randomForest::randomForest(formula, data=trainingSet)
@@ -65,9 +86,9 @@
     # Use the specified model to make predictions for dataset
     testPredictions <- predict(fit, newdata = testSet, type="response")
     dataPredictions <- predict(fit, newdata = dataset, type="response")
-    .auditPredResult(formula, fit, testPredictions, dataPredictions, trainingSet, testSet, options, jaspResults, name)
+    .auditPredResult(formula, fit, testPredictions, dataPredictions, trainingSet, testSet, options, jaspResults, name, dataset)
   }
-  else if (name == "classificationResultADA")
+  if (grepl("ADA", name, fixed = TRUE))
   {
     fit <- gbm::gbm(
       formula = formula, data = trainingSet, distribution = "multinomial"
@@ -77,11 +98,8 @@
     dataPredictions <- colnames(dataProbs)[apply(dataProbs, 1, which.max)]
     testPredictions <- dataPredictions[-trainingIndex]
     
-    .auditPredResult(formula, fit, testPredictions, dataPredictions, trainingSet, testSet, options, jaspResults, name)
+    .auditPredResult(formula, fit, testPredictions, dataPredictions, trainingSet, testSet, options, jaspResults, name, dataset)
   }
-  
-
-
 }
 
 

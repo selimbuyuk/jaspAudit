@@ -27,6 +27,7 @@ auditFairnessCriteriaAndSelection <- function(jaspResults, dataset, options, ...
   
   #x <- jfa::fairness()
   
+  
   ready <- (  options[["group"]]      != "" &&
                 options[["target"]]     != "" &&
                 options[["features"]]   != "" &&
@@ -36,14 +37,12 @@ auditFairnessCriteriaAndSelection <- function(jaspResults, dataset, options, ...
   
   #results <- .auditFMComputeResults(dataset, options, ready)
   results<- .auditFMPred(dataset, options, ready,jaspResults)
+  bestModelName <- .auditFMPickModel(dataset, options, ready, jaspResults, results)
+  # 
+  .auditFMCreateTable(jaspResults, options, dataset, ready, bestModelName)
   
-  .auditFMCreateTable(jaspResults, options, dataset, ready)
+  # .auditFMCreateTable(jaspResults, options, dataset, ready, "")
   #.auditFMCreateTable(jaspResults, options, dataset, ready, results[, -c(1:4)])
-  
-  ## Calculate evaluation measures per group
-  #.auditFMEvaluationMatrixGroup(jaspResults, options, dataset, ready, cbind(results[["levelsGroup"]], results[, c(1:4)]))
-  ## Calculate evaluation measures for all
-  #.auditFMEvaluationMatrixAll(jaspResults, options, dataset, ready)
   
 }
 
@@ -59,6 +58,60 @@ auditFairnessCriteriaAndSelection <- function(jaspResults, dataset, options, ...
   }
 }
 
+.auditFMPickModel <- function(dataset, options, ready, jaspResults, results){
+  if (!ready){return ()}
+  namesModels <- jaspResults[["namesModels"]]$object
+
+  fairnessFrame <- data.frame()
+  performanceFrame <- c()
+  for (name in namesModels)
+  {
+    obj <- jaspResults[[name]]$object
+    
+    fairnessFrame <- rbind(fairnessFrame, obj[["subsetValues"]])
+    
+    perfMeasure <- obj[["perfMeasures"]][[options[["perfFocus"]]]]
+    performanceFrame <- append(performanceFrame, perfMeasure)
+
+  }
+  
+  bestModelIndicesPerf <- which(performanceFrame == max(performanceFrame))
+  if (length(bestModelIndicesPerf) > 1)
+  {
+    fairnessFrame<- fairnessFrame[bestModelIndicesPerf,]
+    
+    #measures closer to 1 are considered better/more fair 
+    distance <- abs(fairnessFrame - 1)
+    bestModelIndicesFair <- which(distance == min(distance))
+    #again more than one bestmodel index
+    if (length(bestModelIndicesFair) > 1)
+    {
+      if (!is.data.frame(distance))
+      {
+        index <- which.max(distance)
+        return (namesModels[index])
+      }
+      #normalise all columns and sum to get best model index
+      process<-caret::preProcess(distance, method ="range")
+      normalized <- predict(process, distance)
+      index<- which.max(apply(normalized, 1, sum))
+      
+      return (namesModels[index])
+    }
+    return (namesModels[bestModelIndicesFair]) 
+  }
+  else {
+    return (namesModels[bestModelIndicesPerf])
+  }
+  
+  # #best case: model is best in fairness and best in performance
+  # if (bestFairName == bestPerfName){
+  #   return (bestFairName)
+  # }
+  # #else: discrepancy between fairness and performance, preference is performance for better predictions
+  # return (bestPerfName)
+  
+}
 
 .auditFMPred<-function(dataset, options, ready, jaspResults){
   if (!ready){return ()}
@@ -67,66 +120,83 @@ auditFairnessCriteriaAndSelection <- function(jaspResults, dataset, options, ...
   .auditClassificationSetFormula(options,jaspResults)
   trainingIndex <- sample.int(nrow(dataset), size = ceiling((0.8 * nrow(dataset))))
   
-  for (algo in sample(c("svm","rf","boost"), options[["kmodels"]]))
+  #make index for amount of models created so we can distinguish multiple models of same type
+  i<- 1
+  
+  #create list such that we can append all names of models into it
+  
+  namesModels <- c()
+  
+  #randomly get k models from the algorithm types 
+  for (algo in sample(c("svm","rf","boost"), options[["kmodels"]], replace=TRUE))
   {
-    if (options[["svm"]] && algo == "svm"){
-      #.auditSVM(dataset, jaspResults, options, trainingIndex)
-      .auditML(dataset, jaspResults, options, trainingIndex, "classificationResultSVM")
-      dataPredictions <- jaspResults[["classificationResultSVM"]]$object[["classes"]]
-      .auditFMComputeResults(cbind(dataset,dataPredictions), options, ready, "dataPredictions", jaspResults) 
+    if (options[["svm"]] && algo == "svm")
+    {
+      name <- paste("classificationResultSVM",as.character(i),sep="")
     }
     if (options[["rf"]] && algo == "rf")
     {
-      .auditML(dataset, jaspResults, options, trainingIndex, "classificationResultRF")
-      dataPredictions <- jaspResults[["classificationResultRF"]]$object[["classes"]]
-      .auditFMComputeResults(cbind(dataset,dataPredictions), options, ready, "dataPredictions", jaspResults) 
+      name <- paste("classificationResultRF",as.character(i),sep="")
     }
     if (options[["boost"]] && algo == "boost")
     {
-      .auditML(dataset, jaspResults, options, trainingIndex, "classificationResultADA")
-      dataPredictions <- jaspResults[["classificationResultADA"]]$object[["classes"]]
-      .auditFMComputeResults(cbind(dataset,dataPredictions), options, ready, "dataPredictions", jaspResults) 
+      name <- paste("classificationResultADA",as.character(i),sep="")
     }
+    .auditML(dataset, jaspResults, options, trainingIndex, name)
+    
+    #look into getting this in the .auditPredResult function 
+    dataPredictions <- jaspResults[[name]]$object[["classes"]]
+    .auditFMComputeResults(cbind(dataset,dataPredictions), options, ready, "dataPredictions", jaspResults, name) 
+    
+    #jaspResults[["namesModels"]] <- append(jaspResults[["namesModels"]], name)
+    namesModels <- append(namesModels, name)
+    i <- i + 1
   }
-  
+  jaspResults[["namesModels"]] <- createJaspState(namesModels)
   
 }
 
 
 #maak functie waarin results <- .auditFMComputeResults
-.auditFMCreateTable <- function(jaspResults, options, dataset, ready){
+.auditFMCreateTable <- function(jaspResults, options, dataset, ready, bestModelName){
   if (!ready){
     return ()
   }
   
-  tbPerf <- createJaspTable("Performance Measures Algo")
-  jaspResults[["PMTable"]] <- tbPerf
+  bestModel <- jaspResults[[bestModelName]]$object
   
-  #verander naam voor andere models
-  name <- "classificationResultRF"
-  #name <- "classificationResultSVM"
-  
-  classificationResult1 <- jaspResults[["classificationResultADA"]]$object
-  classificationResult2 <- jaspResults[["classificationResultRF"]]$object
-  classificationResult3 <- jaspResults[["classificationResultSVM"]]$object
+  tbBest <- createJaspTable("Best Model")
+  tbBest$dependOn(optionsFromObject = bestModel)
+  jaspResults[["bestModel"]] <- tbBest
   
   row <- data.frame(
-    # nTrain = classificationResult[["ntrain"]],
-    # nTest = classificationResult[["ntest"]],
-    #classes = classificationResult[["classes"]],
-    testAccADA = classificationResult1[["testAcc"]],
-    testAccRF = classificationResult2[["testAcc"]],
-    testAccSVM = classificationResult3[["testAcc"]]
-  ) 
-  
-  tbPerf$addRows(row)
+    bestmodel <- bestModelName,
+    bestmodelAcc = bestModel[["testAcc"]],
+    bestmodelFocus = bestModel[["perfMeasures"]][[options[["perfFocus"]]]]
+  )
+  tbBest$addRows(row)
+  #tbBest$addColumns(bestModel[["perfMeasures"]][[options[["perfFocus"]]]])
   
   
   tb <- createJaspTable("Comparison of Fairness Measures Between Groups")
+  tb$dependOn(optionsFromObject = bestModel)
+  
   jaspResults[["FMtable"]] <- tb
+  fairnessResult <- bestModel[["fairnessMetrics"]]
   
-  fairnessResult <- jaspResults[["fairnessMetrics"]]$object
+  subset<- jaspResults[["subsetMeasures"]]$object #.auditGetSubset(options)
   
+  
+  if (length(subset) != 0){
+    fairnessResult<- fairnessResult[c("levelsGroup", subset)]
+  }
+  
+  #tb$addRows(fairnessResult)
+  tb$setData(fairnessResult)
+  
+}
+
+.auditGetSubset <- function(options){
   df<- data.frame(id = c("demPar", "propPar", "eqOdds", "prPar", "accPar",
                          "fnrPar", "fprPar", "npvPar",
                          "specPar", "mcc"),
@@ -136,11 +206,7 @@ auditFairnessCriteriaAndSelection <- function(jaspResults, dataset, options, ...
                   "q4" = c("","","","tp","","fn","fp","tn","tn",""))
   
   subset <- subset(df, (q1 == options[["q1"]] & q2 == options[["q2"]] & q3 == options[["q3"]] & q4 == options[["q4"]]))[["id"]]
-  if (length(subset) != 0){
-    fairnessResult<- fairnessResult[c("levelsGroup", subset)]
-  }
-  
-  tb$addColumns(fairnessResult)
+  return (subset)
 }
 
 .auditFMCreateCM <- function(df, target_col, pred_col){
@@ -156,17 +222,6 @@ auditFairnessCriteriaAndSelection <- function(jaspResults, dataset, options, ...
   tn  <- confusion_matrix[1,1]
   counts <- data.frame(tp, fp, tn, fn)
   return(counts)
-}
-
-.auditFMEvalMeasures <- function(counts){
-  accuracy <-  (counts$tp + counts$tn) / (counts$tp + counts$fn + counts$fp + counts$tn)
-  precision <- counts$tp / (counts$tp + counts$fp)
-  recall <- counts$tp / (counts$tp + counts$fn)
-  f1 <- 2 * ((precision * recall) / (precision + recall))
-  
-  resultsDf<- data.frame(accuracy, precision, recall, f1)
-  
-  return(resultsDf)
 }
 
 .auditFMCalcFairMeasures <- function(counts){
@@ -204,14 +259,22 @@ auditFairnessCriteriaAndSelection <- function(jaspResults, dataset, options, ...
   resultsDf <- data.frame(demPar, propPar, eqOdds, prPar, accPar,
                           fnrPar, fprPar, npvPar,
                           specPar, mcc)
+  
+  
   return (resultsDf)
 }
 
 .auditFMCompareGroups <- function(all_groups_df, reference){
-  as.numeric(all_groups_df)/as.numeric(all_groups_df[reference])
+  return (as.numeric(all_groups_df)/as.numeric(all_groups_df[reference]))
 }
 
-.auditFMComputeResults <- function(data, options, ready, predCol, jaspResults)
+.auditFMCalculateRatios<- function(data, privilegedIndex, unprivilegedIndex){
+  
+  return (data[privilegedIndex]/ data[unprivilegedIndex])
+  #return (max(data)/min(data))
+}
+
+.auditFMComputeResults <- function(data, options, ready, predCol, jaspResults, name)
 {
   group<- options[["group"]]
   targetCol<- options[["target"]]
@@ -222,7 +285,9 @@ auditFairnessCriteriaAndSelection <- function(jaspResults, dataset, options, ...
   }
   
   allMeasures <- data.frame()
-  evalMeasures <- data.frame()
+  privilegeFrame <- data.frame()
+  privilegeFrame <- c()
+  #evalMeasures <- data.frame()
   #for each group in the dataset, calculate the confusion matrix, counts and fairness measures
   for (level in levels(factor(data[[group]]))){
     #group the data based on the specified group (e.g race)
@@ -232,39 +297,55 @@ auditFairnessCriteriaAndSelection <- function(jaspResults, dataset, options, ...
     cf <- .auditFMCreateCM(oneGroup, predCol, targetCol)
     counts <- .auditFMGetCounts(cf)
     
+    privilegeRatio <- nrow(subset(oneGroup, oneGroup[[targetCol]] == 1)) / nrow(oneGroup) 
+    privilegeFrame<- append(privilegeFrame, privilegeRatio)
+    
     #calculate the fairness measures per group
     oneGroupMeasures <- .auditFMCalcFairMeasures(counts)
     oneGroupEval<- .auditFMEvalMeasures(counts)
     
     #combine every measure from a single group to one dataframe
     allMeasures<- rbind(allMeasures, oneGroupMeasures)
-    evalMeasures<- rbind(evalMeasures, oneGroupEval)
+    #evalMeasures<- rbind(evalMeasures, oneGroupEval)
   }
   
   # get all the levels for the specified group
   levelsGroup <- levels(as.factor(data[[group]]))
   
+  privilegedIndex <- which.max(privilegeFrame)
+  unprivilegedIndex <- which.min(privilegeFrame)
+  
   #get the index of the referenced level
-  #lev_index <- match(levelsGroup[ref, ], levelsGroup)
   lev_index <- ref + 1L
   
-  # if (options[["q1"]][["q1option1"]]){
-  #   allMeasures<- allMeasures[[options[["q1"]][["q1option1"]]]]
-  # }
+  #get a subset of the fairness measures, generated from the question flowchart
+  subset<- .auditGetSubset(options)
+  jaspResults[["subsetMeasures"]] <- createJaspState(subset)
+  
+  #get ratios from the subset of fmeasures 
+  subsetValues <- apply(allMeasures[subset], 2, .auditFMCalculateRatios,
+                        privilegedIndex = privilegedIndex, unprivilegedIndex = unprivilegedIndex)
+  
+  results <- jaspResults[[name]]$object
+  
+  results[["subsetValues"]] <- subsetValues
   
   #compare the fairness measures of the referenced group with other groups
-  results <- apply(allMeasures[, names(allMeasures) != "groups"], 2, .auditFMCompareGroups, reference = lev_index)
+  fairnessResults <- apply(allMeasures[, names(allMeasures) != "groups"], 2, .auditFMCompareGroups, reference = lev_index)
   
   if (ready) {
-    results <- data.frame(apply(results, 2, signif, digits = 2))
-    results <- cbind(data.frame(levelsGroup), results)
-    results <- cbind(evalMeasures, results)
+    fairnessResults <- data.frame(apply(fairnessResults, 2, signif, digits = 2))
+    fairnessResults <- cbind(data.frame(levelsGroup), fairnessResults)
+    #fairnessResults <- cbind(evalMeasures, fairnessResults)
   }
+  # result[["fairMetrics"]] <- fairnessResults[, -c(1:4)]
+  # result[["perfMetrics"]] <- cbind(Subgroup = fairnessResults[["levelsGroup"]], Metrics = fairnessResults[, c(1:4)])
   
-  jaspResults[["fairnessMetrics"]] <- createJaspState(results[, -c(1:4)])
-  jaspResults[["performanceMetrics"]] <- createJaspState(cbind(results[["levelsGroup"]], results[, c(1:4)]))
+  results[["fairnessMetrics"]] <- fairnessResults
+  jaspResults[[name]] <- createJaspState(results)
   
-  #return (results)
+  #jaspResults[["performanceMetrics"]] <- createJaspState(cbind(fairnessResults[["levelsGroup"]], fairnessResults[, c(1:4)]))
+  
   
 }
 
@@ -291,40 +372,4 @@ auditFairnessCriteriaAndSelection <- function(jaspResults, dataset, options, ...
   return (opt)
 }
 
-.auditFMEvaluationMatrixAll <- function(jaspResults, options, dataset, ready){
-  if (!is.null(jaspResults[["performanceMeasuresAll"]]) || !options[["performanceMeasuresAll"]]) {
-    return()
-  }
-  
-  tableAll <- createJaspTable(title = "Performance Metrics for Whole Dataset")
-  tableAll$dependOn(c("performanceMeasuresAll",.auditFMCommonOptions()))
-  
-  jaspResults[["performanceMeasuresAll"]] <- tableAll
-  
-  if (!ready){
-    return ()
-  }
-  
-  cf <- .auditFMCreateCM(dataset, options[["predicted"]], options[["target"]])
-  counts <- .auditFMGetCounts(cf)
-  results<- .auditFMEvalMeasures(counts)
-  
-  tableAll$addColumnInfo(name = "", title = gettext(""))
-  tableAll$addColumnInfo(name = "accuracy", title = gettext("Accuracy"), type = "number")
-  tableAll$addColumnInfo(name = "precision", title = gettext("Precision (Positive Predictive Value)"), type = "number")
-  tableAll$addColumnInfo(name = "recall", title = gettext("Recall (True Positive Rate)"), type = "number")
-  tableAll$addColumnInfo(name = "f1", title = gettext("F1 Score"), type = "number")
-  
-  tableAll[["accuracy"]] <- results[["accuracy"]]
-  tableAll[["precision"]] <- results[["precision"]]
-  tableAll[["recall"]] <- results[["recall"]]
-  tableAll[["f1"]] <- results[["f1"]]
-  
-  tableAll$transpose <- TRUE
-}
-
-
-
-#een maat moet er makkelijk bij kunne
-#voorbeeld" in de audit, is er dan iets waar iemand
 #jfa::functienaam

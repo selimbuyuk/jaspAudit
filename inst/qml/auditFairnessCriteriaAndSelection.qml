@@ -83,6 +83,13 @@ Form {
         min: 1
         max: 5
       }
+      
+      DropDown
+      {
+        label: "Select the model based on"
+        name: "perfFocus"
+        values: mltask.value == "binclass" ? [{label: "Matthew's Correlation Coefficient", value: "mcc"},  {label:"F1-Score", value:"f1"}]:["RMSE", "MSE", "MAE"]
+      }
     }
     
 	}
@@ -92,7 +99,6 @@ Form {
 	{
 		id: 							variablesFairness
 		preferredHeight:				jaspTheme.smallDefaultVariablesFormHeight
-
 		AvailableVariablesList
 		{
 			name: 						"variablesFairness"
@@ -121,14 +127,14 @@ Form {
 			id:									features
 			name:								"features"
 			title:								qsTr("Features")
-			allowedColumns:	["scale", "ordinal", "nominal", "nominalText"]
+			allowedColumns: mltask.value == "binclass" ? ["scale", "ordinal", "nominal", "nominalText"]: ["scale"]
 			allowAnalysisOwnComputedColumns:	false
 		}
 
 	}
 	
 Group{
-		Label	{ text : qsTr("Choose a Level")	}
+		Label	{ text : qsTr("Choose a reference group")	}
 		TableView
 		{
 
@@ -266,6 +272,12 @@ Group{
  {
   columns: 1 
   title: qsTr("Fairness Measures")
+  
+  //Zet dit bij de report section!!!
+  Group
+  {
+    CIField { name: "fthreshold"; label: qsTr("Fairness threshold");defaultValue : 80 }
+  }
     
   Group
   {
