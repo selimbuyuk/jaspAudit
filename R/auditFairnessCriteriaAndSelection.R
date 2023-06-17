@@ -19,30 +19,26 @@
 # reviewer in the pull Request.
 
 
-#DOE ALLES ONDER AUDIT OF ALGORITHMS
-#AUDIT OF FINANCIAL STATEMENS
-#AUDIT OF DATA
-
 auditFairnessCriteriaAndSelection <- function(jaspResults, dataset, options, ...) {
-  
-  #x <- jfa::fairness()
-  
-  
   ready <- (  options[["group"]]      != "" &&
                 options[["target"]]     != "" &&
-                options[["features"]]   != "" &&
+                options[["featPred"]]   != "" &&
                 options[["selectedRow"]] != -1 )
   
   dataset <- .auditFMReadData(dataset, options, ready)
+  if (options[["predictBool"]] == "ownPrediction")
+  {
+    .auditFMComputeResults(dataset, options, ready, options[["featPred"]], jaspResults, "onlyModel")
+    bestModelName <- "onlyModel"
+  }
+  else 
+  {
+    .auditFMPred(dataset, options, ready, jaspResults)
+    bestModelName <- .auditFMPickModel(dataset, options, ready, jaspResults)
+    
+  }
   
-  #results <- .auditFMComputeResults(dataset, options, ready)
-  results<- .auditFMPred(dataset, options, ready,jaspResults)
-  bestModelName <- .auditFMPickModel(dataset, options, ready, jaspResults, results)
-  # 
   .auditFMCreateTable(jaspResults, options, dataset, ready, bestModelName)
-  
-  # .auditFMCreateTable(jaspResults, options, dataset, ready, "")
-  #.auditFMCreateTable(jaspResults, options, dataset, ready, results[, -c(1:4)])
   
 }
 
@@ -53,27 +49,41 @@ auditFairnessCriteriaAndSelection <- function(jaspResults, dataset, options, ...
   
   if (ready) {
     dataset <- .readDataSetToEnd(columns.as.numeric = c(options[["target"]]),
-                                 columns.as.factor= c(options[["group"]], options[["features"]]))
-    return(dataset)
-  }
+                                 columns.as.factor= c(options[["group"]], options[["featPred"]]))}
+  
+  # for (algo in c("scaleVariablesRF", "scaleVariablesSVM", "scaleVariablesBoost"))
+  # {
+  #   if (length(unlist(options[["featPred"]]) > 0) && (options[[algo]])) {
+  #     dataset[, options[["featPred"]]] <- .scaleNumericData(dataset[, options[["featPred"]], drop = FALSE])
+  #   }
+  # }
+  
+  return(dataset)
+  
 }
 
-.auditFMPickModel <- function(dataset, options, ready, jaspResults, results){
+.auditFMPickModel <- function(dataset, options, ready, jaspResults){
   if (!ready){return ()}
-  namesModels <- jaspResults[["namesModels"]]$object
-
+  
+  namesModels <- c()
   fairnessFrame <- data.frame()
   performanceFrame <- c()
-  for (name in namesModels)
+  for (algo in c("svm", "rf", "boost"))
   {
-    obj <- jaspResults[[name]]$object
-    
-    fairnessFrame <- rbind(fairnessFrame, obj[["subsetValues"]])
-    
-    perfMeasure <- obj[["perfMeasures"]][[options[["perfFocus"]]]]
-    performanceFrame <- append(performanceFrame, perfMeasure)
-
+    if (options[[algo]])
+    {
+      name <- paste("classificationResult", algo, sep="")
+      namesModels <- append(namesModels, name)
+      
+      obj <- jaspResults[[name]]$object 
+      
+      fairnessFrame <- rbind(fairnessFrame, obj[["subsetValues"]])
+      
+      perfMeasure <- obj[["perfMeasures"]][[options[["perfFocus"]]]]
+      performanceFrame <- append(performanceFrame, perfMeasure)
+    }
   }
+  
   
   bestModelIndicesPerf <- which(performanceFrame == max(performanceFrame))
   if (length(bestModelIndicesPerf) > 1)
@@ -89,6 +99,7 @@ auditFairnessCriteriaAndSelection <- function(jaspResults, dataset, options, ...
       if (!is.data.frame(distance))
       {
         index <- which.max(distance)
+        print(index)
         return (namesModels[index])
       }
       #normalise all columns and sum to get best model index
@@ -104,77 +115,92 @@ auditFairnessCriteriaAndSelection <- function(jaspResults, dataset, options, ...
     return (namesModels[bestModelIndicesPerf])
   }
   
-  # #best case: model is best in fairness and best in performance
-  # if (bestFairName == bestPerfName){
-  #   return (bestFairName)
-  # }
-  # #else: discrepancy between fairness and performance, preference is performance for better predictions
-  # return (bestPerfName)
-  
 }
 
 .auditFMPred<-function(dataset, options, ready, jaspResults){
   if (!ready){return ()}
   
   #set the formula for every classifier
-  .auditClassificationSetFormula(options,jaspResults)
-  trainingIndex <- sample.int(nrow(dataset), size = ceiling((0.8 * nrow(dataset))))
+  .auditClassificationSetFormula(options, jaspResults)
+  trainingIndex <- sample.int(nrow(dataset), size = ceiling((1 - options[["testDataManual"]]) * nrow(dataset)))
   
-  #make index for amount of models created so we can distinguish multiple models of same type
-  i<- 1
-  
-  #create list such that we can append all names of models into it
-  
-  namesModels <- c()
-  
-  #randomly get k models from the algorithm types 
-  for (algo in sample(c("svm","rf","boost"), options[["kmodels"]], replace=TRUE))
+  if (options[["svm"]])
   {
-    if (options[["svm"]] && algo == "svm")
-    {
-      name <- paste("classificationResultSVM",as.character(i),sep="")
-    }
-    if (options[["rf"]] && algo == "rf")
-    {
-      name <- paste("classificationResultRF",as.character(i),sep="")
-    }
-    if (options[["boost"]] && algo == "boost")
-    {
-      name <- paste("classificationResultADA",as.character(i),sep="")
-    }
+    name <- "classificationResultsvm"
     .auditML(dataset, jaspResults, options, trainingIndex, name)
-    
-    #look into getting this in the .auditPredResult function 
     dataPredictions <- jaspResults[[name]]$object[["classes"]]
     .auditFMComputeResults(cbind(dataset,dataPredictions), options, ready, "dataPredictions", jaspResults, name) 
-    
-    #jaspResults[["namesModels"]] <- append(jaspResults[["namesModels"]], name)
-    namesModels <- append(namesModels, name)
-    i <- i + 1
   }
-  jaspResults[["namesModels"]] <- createJaspState(namesModels)
+  if (options[["rf"]])
+  {
+    name <- "classificationResultrf"
+    .auditML(dataset, jaspResults, options, trainingIndex, name)
+    dataPredictions <- jaspResults[[name]]$object[["classes"]]
+    .auditFMComputeResults(cbind(dataset,dataPredictions), options, ready, "dataPredictions", jaspResults, name) 
+  }
+  if (options[["boost"]])
+  {
+    name <- "classificationResultboost"
+    .auditML(dataset, jaspResults, options, trainingIndex, name)
+    dataPredictions <- jaspResults[[name]]$object[["classes"]]
+    .auditFMComputeResults(cbind(dataset,dataPredictions), options, ready, "dataPredictions", jaspResults, name) 
+  }
+}
+
+.auditFMFairnessCheck <- function(bestModel, options, jaspResults){
+  
+  fairnessResults <- bestModel[["subsetValues"]]
+  lowerLimit <- options[["fthreshold"]]
+  upperLimit <- 1/options[["fthreshold"]]
+  #lambda function so that we dont have to name a function
+  fairnessMask <- (lowerLimit< fairnessResults & fairnessResults < upperLimit)
+  
+  # fairnessMask<- apply(fairnessResults, 1,
+  #                      \(row, lowerLimit, upperLimit) (lowerLimit< row & row < upperLimit),
+  #                                                      lowerLimit, upperLimit)
+  #apply(ie, 2, \(row, fthresh) (fthresh/1)< row & row < (1/fthresh), 0.1)
+  jaspResults[["fairnessMask"]] <- createJaspState(fairnessMask)
   
 }
 
-
 #maak functie waarin results <- .auditFMComputeResults
 .auditFMCreateTable <- function(jaspResults, options, dataset, ready, bestModelName){
+  
+  containerProcedure <- createJaspContainer(title = gettext("<u>Procedure</u>"))
+  paragraphProcedure<- createJaspHtml(text = gettext("The goal of this procedure is to determine whether a dataset is fair for all subgroups in a sensitive attribute. We characterise an attribute as sensitive if it can lead to a specific person's legal, ethical, social, or personal beliefs. Examples of this are race, religion and gender. Since we are interested in the relative unfairness between subgroups, called disparity, we want to evaluate them with fairness measures. In order to do this, we have to provide a group that acts as a reference point. We consider a disparity tolerance, where values in this tolerance range are considered to be fair. This disparity tolerance is provided by the user, but generally a tolerance of 80% is used. This means that subgroups with disparities between 0.8 and 1.25 are considered fair.
+
+  This procedure is designed in such a way that the user is guided through the selection of the best models and fairness measures suited for the given situation."))
+  
+  
+  # To give an example, say that we want to evaluate whether males are hired more often than other genders in an employment dataset where the sensitive attribute gender has the 'male', 'female' and 'other' subgroups.
+  # To evaluate the fairness in this sensitive attribute, we consider males to be the reference group, in which we see that males are hired 70% of the time. 
+  # In order to ascertain a certain unfairness, we have to compare the values of 'female' and 'other' with 'male'. Suppose that females get hired 40% of the time.
+  # If we compare 40% with the 70%, we can see that females are in this case treated unfairly. We can see that there is a 0.4/0.7 = 0.57 disparity between these two subgroups. 
+  # This comparison is also done for the 'other' subgroup, which are hired 80% of the time. This time, there is also an unfair treatment, but for the males, where we can ascertain a disparity of 0.8/0.7 = 1.14. 
+  # However, this does not mean that even a slight disparity, like 0.999, is seen as unfair.  In the above case and a disparity tolerance of 80%, females subgroup is treated unfairly, while others subgroup is treated fairly in reference to males.
+  
+  containerProcedure[["paragraph"]] <- paragraphProcedure
+  jaspResults[["containerProcedure"]] <- containerProcedure
+  
   if (!ready){
     return ()
   }
   
   bestModel <- jaspResults[[bestModelName]]$object
   
-  tbBest <- createJaspTable("Best Model")
-  tbBest$dependOn(optionsFromObject = bestModel)
-  jaspResults[["bestModel"]] <- tbBest
-  
-  row <- data.frame(
-    bestmodel <- bestModelName,
-    bestmodelAcc = bestModel[["testAcc"]],
-    bestmodelFocus = bestModel[["perfMeasures"]][[options[["perfFocus"]]]]
-  )
-  tbBest$addRows(row)
+  if (options[["predictBool"]] != "ownPrediction")
+  {
+    tbBest <- createJaspTable("Best Model")
+    tbBest$dependOn(optionsFromObject = bestModel)
+    jaspResults[["bestModel"]] <- tbBest
+    
+    row <- data.frame(
+      bestmodel <- bestModelName,
+      bestmodelAcc = bestModel[["testAcc"]],
+      bestmodelFocus = bestModel[["perfMeasures"]][[options[["perfFocus"]]]]
+    )
+    tbBest$addRows(row)
+  }
   #tbBest$addColumns(bestModel[["perfMeasures"]][[options[["perfFocus"]]]])
   
   
@@ -194,6 +220,13 @@ auditFairnessCriteriaAndSelection <- function(jaspResults, dataset, options, ...
   #tb$addRows(fairnessResult)
   tb$setData(fairnessResult)
   
+  
+  .auditFMFairnessCheck(bestModel, options,jaspResults)
+  containerEval <- createJaspContainer(title = gettext("<u>Audit Evaluation</u>"))
+  paragraphEval<- createJaspHtml(text = gettextf(""))
+  containerEval[["paragraph"]] <- paragraphEval
+  jaspResults[["containerEval"]] <- containerEval
+  
 }
 
 .auditGetSubset <- function(options){
@@ -212,7 +245,6 @@ auditFairnessCriteriaAndSelection <- function(jaspResults, dataset, options, ...
 .auditFMCreateCM <- function(df, target_col, pred_col){
   cf <- caret::confusionMatrix(data = as.factor(df[[pred_col]]),reference=as.factor(df[[target_col]]))$table
   return(cf)
-  #table(factor(act), factor(pred))
 }
 
 .auditFMGetCounts <- function(confusion_matrix){
@@ -236,9 +268,11 @@ auditFairnessCriteriaAndSelection <- function(jaspResults, dataset, options, ...
   propPar <- (counts$tp + counts$fp) / (counts$tp + counts$fp + counts$tn + counts$fn)
   
   #original was wrong so we adapted it 
-  #eqOdds <- counts$tp / (counts$tp + counts$fn)
+  eqOdds <- counts$tp / (counts$tp + counts$fn)
   #tpr/fpr should be 1 if equalized odds. this has to be 
-  eqOdds <- (counts$tp / (counts$tp + counts$fn)) / ((counts$fp / (counts$fp + counts$tn)))
+  
+  #when eqOdds is selected, show tprPar and fprPar
+  tprPar <- (counts$tp / (counts$tp + counts$fn)) 
   
   prPar <- counts$tp / (counts$tp + counts$fp)
   
@@ -281,7 +315,8 @@ auditFairnessCriteriaAndSelection <- function(jaspResults, dataset, options, ...
   ref<- options[["selectedRow"]]
   
   if (!ready) {
-    ref = 0
+    #ref = 0
+    return ()
   }
   
   allMeasures <- data.frame()
@@ -336,15 +371,11 @@ auditFairnessCriteriaAndSelection <- function(jaspResults, dataset, options, ...
   if (ready) {
     fairnessResults <- data.frame(apply(fairnessResults, 2, signif, digits = 2))
     fairnessResults <- cbind(data.frame(levelsGroup), fairnessResults)
-    #fairnessResults <- cbind(evalMeasures, fairnessResults)
+    
   }
-  # result[["fairMetrics"]] <- fairnessResults[, -c(1:4)]
-  # result[["perfMetrics"]] <- cbind(Subgroup = fairnessResults[["levelsGroup"]], Metrics = fairnessResults[, c(1:4)])
   
   results[["fairnessMetrics"]] <- fairnessResults
   jaspResults[[name]] <- createJaspState(results)
-  
-  #jaspResults[["performanceMetrics"]] <- createJaspState(cbind(fairnessResults[["levelsGroup"]], fairnessResults[, c(1:4)]))
   
   
 }

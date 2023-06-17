@@ -28,10 +28,7 @@ Form {
 	columns:							2
 	
 	
-	
-	Section{
-  	title: qsTr("Machine Learning")
-  	columns: 2
+
   	DropDown
     {
       id: "mltask"
@@ -40,60 +37,60 @@ Form {
     	label:								qsTr("Machine Learning Type")
     	values:
     		[
-    		{ label: qsTr("Regular Binary Classification"), 			value: "binclass",id: "binclass"},
-    		{label: qsTr("Fairness-Aware Binary Classification"), 			value: "fairclass",id: "binclass"},    		{ label: qsTr("Regression"), 			value: "regression", id: "regression"},
+    		{ label: qsTr("Binary Classification"), 			value: "binclass",id: "binclass"},
+    		{ label: qsTr("Regression"), 			value: "regression", id: "regression"},
     	]
     }
     
-    Group
-    {
-      title: "Pick the algorithms"
-      Group
-      {
-        visible : mltask.value == "binclass" ? true:false
-        CheckBox { name: "svm"; label: qsTr("Support Vector Machines"); checked: true}
-        CheckBox { name: "rf";	label: qsTr("Random Forest"); }
-        CheckBox { name: "boost";	label: qsTr("Boosting") ; }
-      }
-      
-      Group
-      {
-        visible : mltask.value == "fairclass" ? true:false
-        CheckBox { name: "fxgb";   label: qsTr("FairXGBoost"); checked: true }
-        CheckBox { name: "fada";	label: qsTr("Fair-AdaBoost")}
-        CheckBox { name: "fgbm";	label: qsTr("FairBGM")}
-      }
-      
-      Group
-      {
-        visible : mltask.value == "regression" ? true:false
-        CheckBox { name: "sreg";   label: qsTr("Simple Regression"); checked: true }
-        CheckBox { name: "lr";	label: qsTr("Logistic Regression")}
+    Group{}
+    
+		Group
+		{
+		RadioButtonGroup{
+			name:									"predictBool"
+			title:									qsTr("Generate predictions or use own?")
+
+      RadioButton{label:"Use own predictions"; id:"ownPrediction"; value:"ownPrediction" }
+			RadioButton{label:"Generate predictions";id:"genPredictions"     ;
+			    			Group
+          {
+            title: "Pick the algorithms"
+            visible : mltask.value == "binclass" ? true:false
+            CheckBox { name: "svm"; label: qsTr("Support Vector Machines"); checked: true}
+            CheckBox { name: "rf";	label: qsTr("Random Forest"); }
+            CheckBox { name: "boost";	label: qsTr("Boosting") ; }
+          }
+          Group
+          {
+          title: "Pick the algorithms"
+            visible : mltask.value == "regression" ? true:false
+            CheckBox { name: "sreg";   label: qsTr("Simple Regression"); checked: true }
+            CheckBox { name: "lr";	label: qsTr("Logistic Regression")}
+          }
+          Group
+          {
+           // IntegerField
+            //{
+            //  name: "kmodels"
+            //  label: qsTr("Generate K models")
+            //  defaultValue: 3
+            //  fieldWidth: 60
+            //  min: 1
+            //  max: 5
+            //}
+            
+            DropDown
+            {
+              label: "Select the model based on"
+              name: "perfFocus"
+              values: mltask.value == "binclass" ? [{label: "Matthew's Correlation Coefficient", value: "mcc"},  {label:"F1-Score", value:"f1"}]:["RMSE", "MSE", "MAE"]
+            }
+          }
+        }
       }
     }
     
-    Group
-    {
-      IntegerField
-      {
-        name: "kmodels"
-        label: qsTr("Generate K models")
-        defaultValue: 3
-        fieldWidth: 60
-        min: 1
-        max: 5
-      }
-      
-      DropDown
-      {
-        label: "Select the model based on"
-        name: "perfFocus"
-        values: mltask.value == "binclass" ? [{label: "Matthew's Correlation Coefficient", value: "mcc"},  {label:"F1-Score", value:"f1"}]:["RMSE", "MSE", "MAE"]
-      }
-    }
-    
-	}
-  Section{
+	
   title: qsTr("Pick Variables")
 	VariablesForm
 	{
@@ -109,7 +106,7 @@ Form {
 		{
 			id: 						group
 			name: 						"group"
-			title: 						qsTr("Group")
+			title: 						qsTr("Sensitive attribute")
 			singleVariable:				true
 			allowedColumns:				["nominal", "nominalText"]
 		}
@@ -124,13 +121,13 @@ Form {
 		
 		AssignedVariablesList
 		{
-			id:									features
-			name:								"features"
-			title:								qsTr("Features")
-			allowedColumns: mltask.value == "binclass" ? ["scale", "ordinal", "nominal", "nominalText"]: ["scale"]
-			allowAnalysisOwnComputedColumns:	false
+			id:									featPred
+			name:								"featPred"
+			singleVariable:				false//genPredictions.checked ? false:true
+			implicitHeight		: genPredictions.checked ? 100 * preferencesModel.uiScale:50
+			title:							genPredictions.checked ?qsTr("Features"):qsTr("Predictions")
+			allowedColumns:["scale", "ordinal", "nominal", "nominalText"]
 		}
-
 	}
 	
 Group{
@@ -246,6 +243,11 @@ Group{
 
 		}
 		IntegerField { name: "selectedRow"; label: qsTr("debug selected row"); defaultValue: selectedDesign2.rowSelected; negativeValues: true; visible: false }
+		
+		Group
+  {
+    CIField { name: "fthreshold"; label: qsTr("Fairness threshold");defaultValue : 80 }
+  }
 	}
 
   	
@@ -266,18 +268,16 @@ Group{
 			onClicked:					form.exportResults()
 		}
 	}
- }
+ 
 
  Section
  {
   columns: 1 
-  title: qsTr("Fairness Measures")
+  title: qsTr("Fairness Criteria")
   
   //Zet dit bij de report section!!!
-  Group
-  {
-    CIField { name: "fthreshold"; label: qsTr("Fairness threshold");defaultValue : 80 }
-  }
+  
+
     
   Group
   {
@@ -360,6 +360,346 @@ Group{
    }
     
   }
+  
+  Section
+  {
+    title: qsTr("Data Split Preferences")
+    
+    RadioButtonGroup
+    {
+      
+		title: 									qsTr("Holdout Test Data")
+		id:                     holdoutData
+		name: 									"holdoutData"
+
+		RadioButton
+		{
+			id:									holdoutManual
+			name:								"holdoutManual"
+			childrenOnSameRow:					true
+			text:								qsTr("Sample")
+
+			Row
+			{
+				PercentField
+				{
+					name:						"testDataManual"
+					defaultValue:				20
+					min:						5
+					max:						95
+					afterLabel:					qsTr("% of all data")
+				}
+			}
+		}
+
+		CheckBox
+		{
+			id:									addIndicator
+			name:								"addIndicator"
+			text:								qsTr("Add generated indicator to data")
+			Layout.leftMargin:					20
+			enabled:							holdoutManual.checked
+
+			ComputedColumnField
+			{
+				name:							"testIndicatorColumn"
+				text:							qsTr("Column name")
+				fieldWidth:						120
+				visible:						addIndicator.checked
+			}
+		}
+
+		RadioButton
+		{
+			name: 								"testSetIndicator"
+			label: 								qsTr("Test set indicator")
+			childrenOnSameRow: 					true
+
+			DropDown
+			{
+				id: 							testSetIndicatorVariable
+				name: 							"testSetIndicatorVariable"
+				showVariableTypeIcon: 			true
+				addEmptyValue: 					true
+				placeholderText: 				qsTr("None")
+			}
+		}
+	
+    }
+  }
+  
+  Section
+  {
+    title:						qsTr("Training Parameters")
+    visible: genPredictions.checked ? true:false
+
+		Group
+		{
+		//this does not work, seems that checkboxes in JASP dont have signals 
+	   enabled: rf.checked ? true:false
+			title:								qsTr("Algorithmic Settings RF")
+
+			PercentField
+			{
+				name:							"baggingFraction"
+				text:							qsTr("Training data used per tree")
+				defaultValue:					50
+				min:							5
+				max:							95
+			}
+
+			RowLayout
+			{
+				DropDown
+				{
+					id:							noOfPredictors
+					name:						"noOfPredictors"
+					indexDefaultValue:			0
+					label:						qsTr("Features per split")
+					values:
+						[
+						{ label: qsTr("Auto"), 		value: "auto"},
+						{ label: qsTr("Manual"), 	value: "manual"}
+					]
+				}
+
+				IntegerField
+				{
+					name:						"numberOfPredictors"
+					defaultValue:				1
+					min:						0
+					max:						10000
+					visible:					noOfPredictors.currentIndex == 1
+				}
+			}
+
+			CheckBox
+			{
+				text:							qsTr("Scale features")
+				name:							"scaleVariablesRF"
+				checked:						true
+			}
+
+			CheckBox
+			{
+				name:							"setSeed"
+				text:							qsTr("Set seed")
+				childrenOnSameRow:				true
+
+				IntegerField
+				{
+					name:						"seed"
+					defaultValue:				1
+					min:						-999999
+					max:						999999
+					fieldWidth:					60
+				}
+			}
+
+		RadioButtonGroup
+		{
+			title:								qsTr("Number of Trees")
+			name:								"modelOptimization"
+
+			RadioButton
+			{
+				text:							qsTr("Fixed")
+				name:							"manual"
+
+				IntegerField
+				{
+					name:						"noOfTrees"
+					text:						qsTr("Trees")
+					defaultValue:				100
+					min:						1
+					max:						500000
+					fieldWidth:					60
+				}
+			}
+
+			RadioButton
+			{
+				id:								optimizeModel
+				text:							qsTr("Optimized")
+				name:							"optimized"
+				checked:						true
+
+				IntegerField
+				{
+					name:						"maxTrees"
+					text:						qsTr("Max. trees")
+					defaultValue:				100
+					min:						1
+					max:						500000
+					fieldWidth:					60
+				}
+			}
+		}
+	}
+	
+		Group{
+			title:								qsTr("Algorithmic Settings SVM")
+
+			DropDown
+			{
+				id:								weights
+				name:							"weights"
+				indexDefaultValue:				0
+				label:							qsTr("Weights")
+				values:
+					[
+					{ label: qsTr("Linear"),	value: "linear"},
+					{ label: qsTr("Radial"),	value: "radial"},
+					{ label: qsTr("Polynomial"),value: "polynomial"},
+					{ label: qsTr("Sigmoid"),	value: "sigmoid"}
+				]
+			}
+
+			DoubleField
+			{
+				name:							"degree"
+				text:							qsTr("Degree")
+				defaultValue:					3
+				min:							1
+				enabled:						weights.value == "polynomial"
+				Layout.leftMargin:				10 * preferencesModel.uiScale
+			}
+
+			DoubleField
+			{
+				name:							"gamma"
+				text:							qsTr("Gamma parameter")
+				defaultValue:					1
+				min:							0
+				enabled:						weights.value != "linear"
+				Layout.leftMargin:				10 * preferencesModel.uiScale
+			}
+
+			DoubleField
+			{
+				name:							"complexityParameter"
+				text:							qsTr("r parameter")
+				defaultValue:					0
+				min:							0
+				enabled:						weights.value == "polynomial" | weights.value == "sigmoid"
+				Layout.leftMargin:				10 * preferencesModel.uiScale
+			}
+
+			DoubleField
+			{
+				name:							"cost"
+				text:							qsTr("Cost of constraints violation")
+				defaultValue:					1
+				min:							0.001
+			}
+
+			DoubleField
+			{
+				name:							"tolerance"
+				text:							qsTr("Tolerance of termination criterion")
+				defaultValue:					0.001
+				min:							0.001
+			}
+
+			DoubleField
+			{
+				name:							"epsilon"
+				text:							qsTr("Epsilon")
+				defaultValue:					0.01
+				min:							0.001
+			}
+
+			CheckBox
+			{
+				text:							qsTr("Scale features")
+				name:							"scaleVariablesSVM"
+				checked:						true
+			}
+
+			CheckBox
+			{
+				name:							"setSeedSVM"
+				text:							qsTr("Set seed")
+				childrenOnSameRow:				true
+
+				IntegerField
+				{
+					name:						"seedSVM"
+					defaultValue:				1
+					min:						-999999
+					max:						999999
+					fieldWidth:					60
+				}
+			}
+		
+	}
+	
+	
+	Group
+	{
+	
+			title:								qsTr("Algorithmic Settings Boosting")
+
+			DoubleField
+			{
+				name:							"shrinkage"
+				text:							qsTr("Shrinkage")
+				defaultValue:					0.1
+				min:							0
+				max:							1
+			}
+
+			IntegerField
+			{
+				name:							"interactionDepth"
+				text:							qsTr("Interaction depth")
+				defaultValue:					1
+				min:							1
+				max:							99
+			}
+
+			IntegerField
+			{
+				name:							"minObservationsInNode"
+				text:							qsTr("Min. observations in node")
+				defaultValue:					10
+				min:							1
+				max:							50000
+			}
+
+			PercentField
+			{
+				name:							"baggingFractionBoost"
+				text:							qsTr("Training data used per tree")
+				defaultValue:					50
+			}
+
+			CheckBox
+			{
+				text:							qsTr("Scale features")
+				name:							"scaleVariablesBoost"
+				checked:						true
+			}
+
+			CheckBox 
+			{
+				name:							"setSeedBoost"
+				text:							qsTr("Set seed")
+				childrenOnSameRow:				true
+
+				IntegerField 
+				{
+					name:						"seedBoost"
+					defaultValue:				1
+					min:						-999999
+					max:						999999
+					fieldWidth:					60
+				}
+			}
+		
+	}
+	}
+
 
   Section {
   title: qsTr("Performance Measures")
