@@ -51,21 +51,20 @@ Form {
 			title:									qsTr("Generate predictions or use own?")
 
       RadioButton{label:"Use own predictions"; id:"ownPrediction"; value:"ownPrediction" }
-			RadioButton{label:"Generate predictions";id:"genPredictions"     ;
+			RadioButton{label:"Generate predictions";id:"genPredictions"; value:"genPredictions"     ;
 			    			Group
           {
             title: "Pick the algorithms"
             visible : mltask.value == "binclass" ? true:false
             CheckBox { name: "svm"; label: qsTr("Support Vector Machines"); checked: true}
             CheckBox { name: "rf";	label: qsTr("Random Forest"); }
-            CheckBox { name: "boost";	label: qsTr("Boosting") ; }
+            CheckBox { name: "lr";	label: qsTr("Logistic Regression") ; }
           }
           Group
           {
           title: "Pick the algorithms"
             visible : mltask.value == "regression" ? true:false
             CheckBox { name: "sreg";   label: qsTr("Simple Regression"); checked: true }
-            CheckBox { name: "lr";	label: qsTr("Logistic Regression")}
           }
           Group
           {
@@ -129,7 +128,7 @@ Form {
 			allowedColumns:["scale", "ordinal", "nominal", "nominalText"]
 		}
 	}
-	
+
 Group{
 		Label	{ text : qsTr("Choose a reference group")	}
 		TableView
@@ -147,7 +146,7 @@ Group{
 			name				: "selectedDesign2"
 
 			columnNames			: qsTr("")
-			cornerText			: qsTr("Subgroup")
+			cornerText			: qsTr("Sensitive groups")
 			initialColumnCount	: 1// -1 because the first "column" is not a column but the row header
 			columnCount			: 1
 
@@ -242,13 +241,13 @@ Group{
 
 
 		}
+	CIField { name: "fthreshold"; label: qsTr("Fairness threshold");defaultValue : 80 }
+
 		IntegerField { name: "selectedRow"; label: qsTr("debug selected row"); defaultValue: selectedDesign2.rowSelected; negativeValues: true; visible: false }
 		
-		Group
-  {
-    CIField { name: "fthreshold"; label: qsTr("Fairness threshold");defaultValue : 80 }
-  }
+
 	}
+
 
   	
 
@@ -292,7 +291,7 @@ Group{
     {
     name: "q1"
     id: "q1"
-    title: qsTr("Should the ground truth labels be considered?")
+    title: qsTr("Should we focus on a single class?")
     RadioButton{id:"q1option1"; label: qsTr("Yes"); name:"q1option1"; value:"yes";  checked: true}
     RadioButton{id:"q1option2"; label: qsTr("No"); value:"no"}
     }
@@ -312,16 +311,16 @@ Group{
     {
     name: "q2"
     id: "q2"
-    title: q1option1.checked ? qsTr("Should all elements of the confusion matrix be considered?") : qsTr("Should the absolute values or the proportions of the favorable predictions be used?")
-    RadioButton{id:"q2option1"; label: q1option1.checked ? qsTr("Yes"): qsTr("Absolute"); name:"q2option1"; value:q1option1.checked ? "yes": "abs";  checked: true}
-    RadioButton{id:"q2option2"; label: q1option1.checked ? qsTr("No"): qsTr("Proportional"); name:"q2option2"; value:q1option1.checked ? "no": "prop";  checked: true}
+    title: q1option1.checked ? qsTr("Should we focus on correctly or incorrectly classified instances?") : qsTr("Should all elements of the confusion matrix be considered?")
+    RadioButton{id:"q2option1"; label: q1option1.checked ? qsTr("Correctly"): qsTr("Yes"); name:"q2option1"; value: q1option1.checked ? "corr": "yes";  checked: true}
+    RadioButton{id:"q2option2"; label: q1option1.checked ? qsTr("Incorrectly"): qsTr("No"); name:"q2option2"; value: q1option1.checked ? "incorr": "no";  checked: true}
     }
    }
    
   Group
   {
-    id: "g3"
-    visible: (q1option1.checked && q2option2.value == "no" && q2option2.checked) ? true: false
+    id: "g3" 
+    visible: (q1option1.checked & q2option2.checked) | (q1option2.checked & q2option1.checked)? false: true
     HelpButton
   	{
   		toolTip:			qsTr("Click to learn more about Q3.")
@@ -333,32 +332,13 @@ Group{
     {
     name: "q3"
     id: "q3"
-    title: qsTr("Should we focus on correctly or incorrectly classified instances?")
-    RadioButton{id:"q3option1"; label: qsTr("Correctly"); name:"q3option1"; value:(g3.visible) ? "corr": "";  checked: true}
-    RadioButton{id:"q3option2"; label: qsTr("Incorrectly"); name:"q3option2"; value:(g3.visible) ? "incorr": "";  checked: true}
+    title: q2option1.value == "corr" ? qsTr("Should we focus on true positives or true negative rates?"):  qsTr("Should the ground truth labels be considered?")
+    RadioButton{id:"q3option1"; label: q2option1.checked ? qsTr("TP"): qsTr("Yes"); name:"q3option1"; value:
+    g3.visible ? (q2option1.checked ? "tp": "yes"): "";  checked: true}
+    RadioButton{id:"q3option2"; label: q2option1.checked ? qsTr("TN"): qsTr("No"); name:"q3option2"; value:
+    g3.visible ? (q2option1.checked ? "tn": "no"): ""; checked: true}
     }
    }
-   
-  Group
-  {
-    visible: (g3.visible) ? true: false
-    HelpButton
-  	{
-  		toolTip:			qsTr("Click to learn more about Q4.")
-  		helpPage:			"auditQ2Helper"
-  		Layout.columnSpan:	1
-  	}
-
-    RadioButtonGroup
-    {
-    name: "q4"
-    id: "q4"
-    title: q3option1.checked ? qsTr("Should we focus on true positive or true negative rates?") : qsTr("Should we focus on false positive or false negative rates?")
-    RadioButton{id:"q4option1"; label: q3option1.checked ? qsTr("True Positives"): qsTr("False Positives"); name:"q3option1"; value: (g3.visible) ? q3option1.checked ? "tp" : "fp": ""; checked: true}
-    RadioButton{id:"q4option2"; label: q3option1.checked ? qsTr("True Negatives"): qsTr("False Negatives"); name:"q3option2"; value: (g3.visible) ? q3option1.checked ? "tn" : "fn": "";  checked: true}
-    }
-   }
-    
   }
   
   Section
@@ -700,23 +680,33 @@ Group{
 	}
 	}
 
-
-  Section {
-  title: qsTr("Performance Measures")
-
-  		CheckBox
+Section 
+{
+  title :qsTr("Output Options")
+	RadioButtonGroup
 		{
-			text:									qsTr("Enable Performance Metrics Group")
-			name:									"performanceMeasuresGroup"
+			text:									qsTr("Grouping Options")
+			name:									"enableGroup"
+			RadioButton{label: "Group all fairness measures into one plot"; value: "groupPlot"; checked: true}
+			RadioButton{label: "Plot measures seperately"; value: "singlePlot"}
 		}
-
-		CheckBox
+		
+		Group{
+	CheckBox
 		{
-			text:									qsTr("Enable Performance Metrics All")
+			text:									qsTr("Highlight threshhold range in plots")
+			name:									"enableThreshold"
+			checked: true
+		}
+		
+	CheckBox
+		{
+		  enabled: genPredictions.checked ? true: false
+			text:									qsTr("Show all performance metrics")
 			name:									"performanceMeasuresAll"
 		}
-
-  }
+}
+}
 }
 
 

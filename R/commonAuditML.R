@@ -53,6 +53,9 @@
   result[["ntest"]] <- nrow(testSet)
   result[["classes"]] <- dataPredictions
   result[["perfMeasures"]] <- .auditPerfMeasures(dataPredictions, dataset, options)
+  result[["testReal"]] <- testSet[, options[["target"]]]
+  result[["testPred"]] <- testPredictions
+  result[["test"]] <- testSet
 
   jaspResults[[name]] <- createJaspState(result)
   jaspResults[[name]]$dependOn(options = c("target","featPred","group"))
@@ -114,6 +117,71 @@
   }
 }
 
+
+
+.mlClassificationTableMetrics <- function(dataset, options, jaspResults, ready, name) {
+  if (!is.null(jaspResults[["performanceMeasuresAll"]]) || !options[["performanceMeasuresAll"]]) {
+    return()
+  }
+  table <- createJaspTable(title = gettext("Evaluation Metrics"))
+  table$transpose <- TRUE
+  #table$dependOn(options = c(.mlClassificationDependencies(options), "validationMeasures"))
+  table$addColumnInfo(name = "group", title = "", type = "string")
+  table$addColumnInfo(name = "support", title = gettext("Support"), type = "integer")
+  table$addColumnInfo(name = "accuracy", title = gettext("Accuracy"), type = "number")
+  table$addColumnInfo(name = "precision", title = gettext("Precision (Positive Predictive Value)"), type = "number")
+  table$addColumnInfo(name = "recall", title = gettext("Recall (True Positive Rate)"), type = "number")
+  table$addColumnInfo(name = "f1", title = gettext("F1 Score"), type = "number")
+  table$addColumnInfo(name = "mcc", title = gettext("Matthews Correlation Coefficient"), type = "number")
+  #table$addColumnInfo(name = "auc", title = gettext("Area Under Curve (AUC)"), type = "number")
+  table$addFootnote(gettext("All metrics are calculated for every class against all other classes."))
+  if (options[["target"]] != "") {
+    table[["group"]] <- c(levels(factor(dataset[, options[["target"]]])), gettext("Average / Total"))
+  }
+  jaspResults[["performanceMeasuresAll"]] <- table
+  if (!ready) {
+    return()
+  }
+  classificationResult <- jaspResults[[name]]$object
+  pred <- factor(classificationResult[["testPred"]])
+  real <- factor(classificationResult[["testReal"]])
+  lvls <- levels(as.factor(real))
+  support <- rep(NA, length(lvls))
+  accuracy <- rep(NA, length(lvls))
+  precision <- rep(NA, length(lvls))
+  recall <- rep(NA, length(lvls))
+  f1 <- rep(NA, length(lvls))
+  mcc <- rep(NA, length(lvls))
+  #auc <- classificationResult[["auc"]]
+  for (i in seq_along(lvls)) {
+    TP <- length(which(pred == lvls[i] & real == lvls[i]))
+    TN <- length(which(pred != lvls[i] & real != lvls[i]))
+    FN <- length(which(pred != lvls[i] & real == lvls[i]))
+    FP <- length(which(pred == lvls[i] & real != lvls[i]))
+    support[i]  <- length(which(real == lvls[i]))
+    accuracy[i] <- (TP + TN) / (TP + FN + FP + TN)
+    precision[i] <- TP / (TP + FP)
+    recall[i] <- TP / (TP + FN)
+    f1[i] <- 2 * ((precision[i] * recall[i]) / (precision[i] + recall[i]))
+    mcc[i] <- ((TP * TN) - (FP * FN)) / sqrt((TP + FP) * (TP + FN) * (TN + FP) * (TN + FN))
+  }
+  support[length(support) + 1] <- sum(support, na.rm = TRUE)
+  accuracy[length(accuracy) + 1] <- mean(accuracy, na.rm = TRUE)
+  precision[length(precision) + 1] <- sum(precision * support[seq_along(lvls)], na.rm = TRUE) / sum(support[seq_along(lvls)], na.rm = TRUE)
+  recall[length(recall) + 1] <- sum(recall * support[seq_along(lvls)], na.rm = TRUE) / sum(support[seq_along(lvls)], na.rm = TRUE)
+  f1[length(f1) + 1] <- sum(f1 * support[seq_along(lvls)], na.rm = TRUE) / sum(support[seq_along(lvls)], na.rm = TRUE)
+  mcc[length(mcc) + 1] <- mean(mcc, na.rm = TRUE)
+  #auc[length(auc) + 1] <- mean(auc, na.rm = TRUE)
+  table[["group"]] <- c(levels(factor(classificationResult[["test"]][, options[["target"]]])), "Average / Total") # fill again to adjust for missing categories
+  table[["accuracy"]] <- accuracy
+  table[["precision"]] <- precision
+  table[["recall"]] <- recall
+  table[["f1"]] <- f1
+  table[["mcc"]] <- mcc
+  table[["support"]] <- support
+  table$dependOn("performanceMeasuresAll")
+  #table[["auc"]] <- auc
+}
 
 # these could also extend the S3 method scale although that could be somewhat unexpected
 .scaleNumericData <- function(x, ...) {
