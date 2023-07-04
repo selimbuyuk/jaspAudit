@@ -19,26 +19,45 @@
 .auditClassificationSetFormula <- function(options, jaspResults) {
   features <- options[["featPred"]]
   target <- options[["target"]]
-  print('haha')
-  print(features)
   formula <- formula(paste(target, "~", paste(features, collapse = " + ")))
   jaspResults[["formula"]] <- createJaspState(formula)
   jaspResults[["formula"]]$dependOn(options = c("featPred", "target"))
 }
 
-.auditPerfMeasures <- function(dataPredictions, dataset, options){
-  cf <- caret::confusionMatrix(data = as.factor(dataPredictions), reference=as.factor(dataset[, options[["target"]]]))$table
-  counts<- .auditFMGetCounts(cf)
+.auditPerfMeasures <- function(testPredictions, testReal){
+  #cf <- caret::confusionMatrix(data = as.factor(dataPredictions), reference=as.factor(dataset[, options[["target"]]]))$table
+  #counts<- .auditFMGetCounts(cf)
     
-  accuracy <-  (counts$tp + counts$tn) / (counts$tp + counts$fn + counts$fp + counts$tn)
-  precision <- counts$tp / (counts$tp + counts$fp)
-  recall <- counts$tp / (counts$tp + counts$fn)
-  f1 <- 2 * ((precision * recall) / (precision + recall))
-  mcc <- (counts$tp * counts$tn - counts$fp * counts$fn)/
-    sqrt(as.numeric(counts$tp + counts$fp) * as.numeric(counts$tp + counts$fn) *
-           as.numeric(counts$tn + counts$fp)*as.numeric(counts$tn +counts$fn))
+  pred <- factor(testPredictions)
+  real <- factor(testReal)
+  lvls <- levels(as.factor(real))
+  support <- rep(NA, length(lvls))
+  accuracy <- rep(NA, length(lvls))
+  precision <- rep(NA, length(lvls))
+  recall <- rep(NA, length(lvls))
+  f1 <- rep(NA, length(lvls))
+  mcc <- rep(NA, length(lvls))
+  #auc <- classificationResult[["auc"]]
+  for (i in seq_along(lvls)) {
+    TP <- as.numeric(length(which(pred == lvls[i] & real == lvls[i])))
+    TN <- as.numeric(length(which(pred != lvls[i] & real != lvls[i])))
+    FN <- as.numeric(length(which(pred != lvls[i] & real == lvls[i])))
+    FP <- as.numeric(length(which(pred == lvls[i] & real != lvls[i])))
+    support[i]  <- length(which(real == lvls[i]))
+    accuracy[i] <- (TP + TN) / (TP + FN + FP + TN)
+    precision[i] <- TP / (TP + FP)
+    recall[i] <- TP / (TP + FN)
+    f1[i] <- 2 * ((precision[i] * recall[i]) / (precision[i] + recall[i]))
+    mcc[i] <- ((TP * TN) - (FP * FN)) / sqrt((TP + FP) * (TP + FN) * (TN + FP) * (TN + FN))
+  }
+  support[length(support) + 1] <- sum(support, na.rm = TRUE)
+  accuracy[length(accuracy) + 1] <- mean(accuracy, na.rm = TRUE)
+  precision[length(precision) + 1] <- sum(precision * support[seq_along(lvls)], na.rm = TRUE) / sum(support[seq_along(lvls)], na.rm = TRUE)
+  recall[length(recall) + 1] <- sum(recall * support[seq_along(lvls)], na.rm = TRUE) / sum(support[seq_along(lvls)], na.rm = TRUE)
+  f1[length(f1) + 1] <- sum(f1 * support[seq_along(lvls)], na.rm = TRUE) / sum(support[seq_along(lvls)], na.rm = TRUE)
+  mcc[length(mcc) + 1] <- mean(mcc, na.rm = TRUE)
   
-  resultsDf<- data.frame(accuracy, precision, recall, f1, mcc)
+  resultsDf<- data.frame(support, accuracy, precision, recall, f1, mcc)
   
   return(resultsDf)
 }
@@ -52,13 +71,13 @@
   result[["ntrain"]] <- nrow(trainingSet)
   result[["ntest"]] <- nrow(testSet)
   result[["classes"]] <- dataPredictions
-  result[["perfMeasures"]] <- .auditPerfMeasures(dataPredictions, dataset, options)
   result[["testReal"]] <- testSet[, options[["target"]]]
   result[["testPred"]] <- testPredictions
   result[["test"]] <- testSet
+  result[["perfMeasures"]] <- .auditPerfMeasures(result[["testReal"]],result[["testPred"]])
 
   jaspResults[[name]] <- createJaspState(result)
-  jaspResults[[name]]$dependOn(options = c("target","featPred","group"))
+  jaspResults[[name]]$dependOn(options = c("target","featPred","group","svm","lr","rf", "predictBool", "testDataManual"))
 }
 
 .auditML<- function(dataset, jaspResults, options, trainingIndex, name){
@@ -86,7 +105,7 @@
   }
   if (grepl("rf", name, fixed = TRUE))
   {
-    trainingSet[[options[["target"]]]] <- as.factor(trainingSet[[options[["target"]]]])
+    #trainingSet[[options[["target"]]]] <- as.factor(trainingSet[[options[["target"]]]])
     fit <- randomForest::randomForest(formula, data=trainingSet, ntree = options[["noOfTrees"]], mtry = options[["numberOfPredictors"]],
                                       sampsize = ceiling(options[["baggingFraction"]] * nrow(trainingSet)),
                                       importance = TRUE, keep.forest = TRUE)
@@ -95,26 +114,36 @@
     testPredictions <- predict(fit, newdata = testSet, type="response")
     dataPredictions <- predict(fit, newdata = dataset, type="response")
     .auditPredResult(formula, fit, testPredictions, dataPredictions, trainingSet, testSet, options, jaspResults, name, dataset)
-  }
-  if (grepl("boost", name, fixed = TRUE))
+  }  
+  if (grepl("lr", name, fixed = TRUE))
   {
-    #if sensitive attribute is not a feature, delete it so we can rearrange the dataset
-    trainingSet <- trainingSet[, names(trainingSet) != options[["group"]]]
+    fit <- stats::glm(formula, family=binomial(link='logit'),data=trainingSet)
     
-    # gbm expects the columns in the data to be in the same order as the variables...
-    trainingSet<- trainingSet[, match(names(trainingSet), all.vars(formula))]
-    fit <- gbm::gbm(
-      formula = formula, data = trainingSet, distribution = "multinomial", n.cores = 1, keep.data = TRUE,n.trees = options[["noOfTrees"]],
-      shrinkage = options[["shrinkage"]], interaction.depth = options[["interactionDepth"]],
-      bag.fraction = options[["baggingFraction"]], n.minobsinnode = options[["minObservationsInNode"]]
-    )
-    
-    dataProbs <- gbm::predict.gbm(fit, newdata = dataset, type = "response")
-    dataPredictions <- colnames(dataProbs)[apply(dataProbs, 1, which.max)]
-    testPredictions <- dataPredictions[-trainingIndex]
-    
+    testPredictions <- predict(fit, newdata = testSet, type="response")
+    dataPredictions <- predict(fit, newdata = dataset, type="response")
+    testPredictions <- ifelse(testPredictions > 0.5,1,0)
+    dataPredictions <- ifelse(dataPredictions > 0.5,1,0)
     .auditPredResult(formula, fit, testPredictions, dataPredictions, trainingSet, testSet, options, jaspResults, name, dataset)
   }
+  # if (grepl("boost", name, fixed = TRUE))
+  # {
+  #   #if sensitive attribute is not a feature, delete it so we can rearrange the dataset
+  #   trainingSet <- trainingSet[, names(trainingSet) != options[["group"]]]
+  #   
+  #   # gbm expects the columns in the data to be in the same order as the variables...
+  #   trainingSet<- trainingSet[, match(names(trainingSet), all.vars(formula))]
+  #   fit <- gbm::gbm(
+  #     formula = formula, data = trainingSet, distribution = "multinomial", n.cores = 1, keep.data = TRUE,n.trees = options[["noOfTrees"]],
+  #     shrinkage = options[["shrinkage"]], interaction.depth = options[["interactionDepth"]],
+  #     bag.fraction = options[["baggingFraction"]], n.minobsinnode = options[["minObservationsInNode"]]
+  #   )
+  #   
+  #   dataProbs <- gbm::predict.gbm(fit, newdata = dataset, type = "response")
+  #   dataPredictions <- colnames(dataProbs)[apply(dataProbs, 1, which.max)]
+  #   testPredictions <- dataPredictions[-trainingIndex]
+  #   
+  #   .auditPredResult(formula, fit, testPredictions, dataPredictions, trainingSet, testSet, options, jaspResults, name, dataset)
+  # }
 }
 
 
@@ -123,7 +152,15 @@
   if (!is.null(jaspResults[["performanceMeasuresAll"]]) || !options[["performanceMeasuresAll"]]) {
     return()
   }
-  table <- createJaspTable(title = gettext("Evaluation Metrics"))
+
+  if (grepl("svm", name, fixed = TRUE))
+  {bestModel <- "SVM)"}
+  if (grepl("lr", name, fixed = TRUE))
+  {bestModel <- "LR)"}
+  if (grepl("rf", name, fixed = TRUE))
+  {bestModel <- "RF)"}
+  
+  table <- createJaspTable(title = gettext(paste("Evaluation Metrics of Best Model (", bestModel, sep="")))
   table$transpose <- TRUE
   #table$dependOn(options = c(.mlClassificationDependencies(options), "validationMeasures"))
   table$addColumnInfo(name = "group", title = "", type = "string")
@@ -142,44 +179,21 @@
   if (!ready) {
     return()
   }
-  classificationResult <- jaspResults[[name]]$object
-  pred <- factor(classificationResult[["testPred"]])
-  real <- factor(classificationResult[["testReal"]])
-  lvls <- levels(as.factor(real))
-  support <- rep(NA, length(lvls))
-  accuracy <- rep(NA, length(lvls))
-  precision <- rep(NA, length(lvls))
-  recall <- rep(NA, length(lvls))
-  f1 <- rep(NA, length(lvls))
-  mcc <- rep(NA, length(lvls))
-  #auc <- classificationResult[["auc"]]
-  for (i in seq_along(lvls)) {
-    TP <- length(which(pred == lvls[i] & real == lvls[i]))
-    TN <- length(which(pred != lvls[i] & real != lvls[i]))
-    FN <- length(which(pred != lvls[i] & real == lvls[i]))
-    FP <- length(which(pred == lvls[i] & real != lvls[i]))
-    support[i]  <- length(which(real == lvls[i]))
-    accuracy[i] <- (TP + TN) / (TP + FN + FP + TN)
-    precision[i] <- TP / (TP + FP)
-    recall[i] <- TP / (TP + FN)
-    f1[i] <- 2 * ((precision[i] * recall[i]) / (precision[i] + recall[i]))
-    mcc[i] <- ((TP * TN) - (FP * FN)) / sqrt((TP + FP) * (TP + FN) * (TN + FP) * (TN + FN))
-  }
-  support[length(support) + 1] <- sum(support, na.rm = TRUE)
-  accuracy[length(accuracy) + 1] <- mean(accuracy, na.rm = TRUE)
-  precision[length(precision) + 1] <- sum(precision * support[seq_along(lvls)], na.rm = TRUE) / sum(support[seq_along(lvls)], na.rm = TRUE)
-  recall[length(recall) + 1] <- sum(recall * support[seq_along(lvls)], na.rm = TRUE) / sum(support[seq_along(lvls)], na.rm = TRUE)
-  f1[length(f1) + 1] <- sum(f1 * support[seq_along(lvls)], na.rm = TRUE) / sum(support[seq_along(lvls)], na.rm = TRUE)
-  mcc[length(mcc) + 1] <- mean(mcc, na.rm = TRUE)
+  
+  classificationResult<- jaspResults[[name]]$object
+  classificationResult <- classificationResult[["perfMeasures"]]
+  print("hierzo")
+  print(name)
+  print(jaspResults[[name]]$obj)
   #auc[length(auc) + 1] <- mean(auc, na.rm = TRUE)
   table[["group"]] <- c(levels(factor(classificationResult[["test"]][, options[["target"]]])), "Average / Total") # fill again to adjust for missing categories
-  table[["accuracy"]] <- accuracy
-  table[["precision"]] <- precision
-  table[["recall"]] <- recall
-  table[["f1"]] <- f1
-  table[["mcc"]] <- mcc
-  table[["support"]] <- support
-  table$dependOn("performanceMeasuresAll")
+  table[["accuracy"]] <- classificationResult[["accuracy"]]
+  table[["precision"]] <- classificationResult[["precision"]]
+  table[["recall"]] <- classificationResult[["recall"]]
+  table[["f1"]] <- classificationResult[["f1"]]
+  table[["mcc"]] <- classificationResult[["mcc"]]
+  table[["support"]] <- classificationResult[["support"]]
+  table$dependOn(options = c("performanceMeasuresAll","svm","lr","rf","featPred","target","group", "genPredictions"))
   #table[["auc"]] <- auc
 }
 

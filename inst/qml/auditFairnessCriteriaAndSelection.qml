@@ -122,10 +122,11 @@ Form {
 		{
 			id:									featPred
 			name:								"featPred"
-			singleVariable:				false//genPredictions.checked ? false:true
+			singleVariable:			genPredictions.checked ? false:true
 			implicitHeight		: genPredictions.checked ? 100 * preferencesModel.uiScale:50
 			title:							genPredictions.checked ?qsTr("Features"):qsTr("Predictions")
 			allowedColumns:["scale", "ordinal", "nominal", "nominalText"]
+			//height: 100
 		}
 	}
 
@@ -248,10 +249,6 @@ Group{
 
 	}
 
-
-  	
-
-
 	Item
 	{
 		Layout.preferredHeight:			download.height
@@ -372,38 +369,38 @@ Group{
 			}
 		}
 
-		CheckBox
-		{
-			id:									addIndicator
-			name:								"addIndicator"
-			text:								qsTr("Add generated indicator to data")
-			Layout.leftMargin:					20
-			enabled:							holdoutManual.checked
-
-			ComputedColumnField
-			{
-				name:							"testIndicatorColumn"
-				text:							qsTr("Column name")
-				fieldWidth:						120
-				visible:						addIndicator.checked
-			}
-		}
-
-		RadioButton
-		{
-			name: 								"testSetIndicator"
-			label: 								qsTr("Test set indicator")
-			childrenOnSameRow: 					true
-
-			DropDown
-			{
-				id: 							testSetIndicatorVariable
-				name: 							"testSetIndicatorVariable"
-				showVariableTypeIcon: 			true
-				addEmptyValue: 					true
-				placeholderText: 				qsTr("None")
-			}
-		}
+//		CheckBox
+//		{
+//			id:									addIndicator
+//			name:								"addIndicator"
+//			text:								qsTr("Add generated indicator to data")
+//			Layout.leftMargin:					20
+//			enabled:							holdoutManual.checked
+//
+//			ComputedColumnField
+//			{
+//				name:							"testIndicatorColumn"
+//				text:							qsTr("Column name")
+//				fieldWidth:						120
+//				visible:						addIndicator.checked
+//			}
+//		}
+//
+//		RadioButton
+//		{
+//			name: 								"testSetIndicator"
+//			label: 								qsTr("Test set indicator")
+//			childrenOnSameRow: 					true
+//
+//			DropDown
+//			{
+//				id: 							testSetIndicatorVariable
+//				name: 							"testSetIndicatorVariable"
+//				showVariableTypeIcon: 			true
+//				addEmptyValue: 					true
+//				placeholderText: 				qsTr("None")
+//			}
+//		}
 	
     }
   }
@@ -706,6 +703,17 @@ Section
 			name:									"performanceMeasuresAll"
 		}
 }
+Group{
+	RadioButtonGroup
+		{
+			text:									qsTr("Fairness Tie-breaker")
+			name:									"tiebreaker"
+			RadioButton{label: "Pick randomly"; value: "randomTie"; checked: true}
+			RadioButton{label: "Pick best case"; value: "bestTie"}
+			RadioButton{label: "Plot worse case"; value: "worseTie"}
+		}
+		}
+		
 }
 }
 
